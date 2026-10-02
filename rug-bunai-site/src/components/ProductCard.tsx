@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { formatINR, priceRange, type Product } from '../data/products';
 import { COLORS, colorHex, findTerm, MATERIALS, TECHNIQUES } from '../data/vocabularies';
-import { rugImage } from '../lib/rugArt';
+import { productPhoto } from '../lib/products';
 
 /** Reveal-on-scroll wrapper (IntersectionObserver; honours reduced motion via CSS). */
 export function Reveal({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
@@ -43,7 +43,7 @@ export function ProductCard({ product, eager = false }: { product: Product; eage
       <div className="card-media">
         <Link to={`/rugs/${product.slug}`} aria-label={`${product.name} — view details`}>
           <img
-            src={rugImage(product, 0, 640, 480)}
+            src={productPhoto(product, 0, 640, 480)}
             alt={`${product.name}, ${tech} ${mat.toLowerCase()} rug`}
             loading={eager ? 'eager' : 'lazy'}
             width={640}
@@ -53,7 +53,7 @@ export function ProductCard({ product, eager = false }: { product: Product; eage
         <div className="card-alts" aria-hidden="true">
           {altAngles.map((i) => (
             <span key={i} className="alt-thumb">
-              <img src={rugImage(product, i, 120, 120)} alt="" loading="lazy" width={120} height={120} />
+              <img src={productPhoto(product, i, 120, 120)} alt="" loading="lazy" width={120} height={120} />
             </span>
           ))}
           <span className="alt-more">+{Math.max(product.thumbnailCount - 4, 0)}</span>

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { formatINR, getProduct, PRODUCTS } from '../data/products';
+import { formatINR, type Product, type Variant } from '../data/products';
 import { CLASSIFICATIONS, colorHex, findTerm, MATERIALS, TECHNIQUES } from '../data/vocabularies';
-import { rugImage } from '../lib/rugArt';
+import { productPhoto, similarProducts } from '../lib/products';
+import { useProducts } from '../lib/catalog';
 import { useCart } from '../lib/cart';
 import { ProductCard, Reveal } from '../components/ProductCard';
 
@@ -10,13 +11,15 @@ import { ProductCard, Reveal } from '../components/ProductCard';
  * PDP — where conversion happens. Interactive gallery with macro angles,
  * colour swatches + size pills (variants), exhaustive dual-unit specs,
  * craft storytelling tab, and typed product relationships ("complete the look").
+ * Products resolve from the shared database-backed catalogue.
  */
 export default function ProductPage() {
   const { slug } = useParams();
-  const product = getProduct(slug ?? '');
+  const { products, bySlug, byId } = useProducts();
+  const product = slug ? bySlug(slug) : undefined;
   const [angle, setAngle] = useState(0);
   const [zoom, setZoom] = useState(false);
-  const [color, setColor] = useState(product?.colorSlugs[0] ?? '');
+  const [color, setColor] = useState<string>(product?.colorSlugs[0] ?? '');
   const [variantId, setVariantId] = useState<string | null>(null);
   const [tab, setTab] = useState<'details' | 'craft' | 'care'>('details');
   const [toast, setToast] = useState<string | null>(null);
@@ -30,13 +33,13 @@ export default function ProductPage() {
     window.scrollTo(0, 0);
   }, [slug, product]);
 
-  const variantsInColor = useMemo(
-    () => product?.variants.filter((v) => v.colorSlug === color) ?? [],
+  const variantsInColor: Variant[] = useMemo(
+    () => product?.variants.filter((v: Variant) => v.colorSlug === color) ?? [],
     [product, color],
   );
-  const selected =
-    product?.variants.find((v) => v.id === variantId) ??
-    variantsInColor.find((v) => v.stock > 0) ??
+  const selected: Variant | undefined =
+    product?.variants.find((v: Variant) => v.id === variantId) ??
+    variantsInColor.find((v: Variant) => v.stock > 0) ??
     variantsInColor[0];
 
   if (!product) {
@@ -52,9 +55,17 @@ export default function ProductPage() {
   const tech = findTerm(TECHNIQUES, product.techniqueSlug)?.label ?? '';
   const mat = findTerm(MATERIALS, product.materialSlug)?.label ?? '';
   const classification = findTerm(CLASSIFICATIONS, product.classificationSlug)?.label ?? '';
-  const related = product.relationships
-    .map((r) => getProduct(PRODUCTS.find((p) => p.id === r.targetId)?.slug ?? ''))
-    .filter((p): p is NonNullable<typeof p> => Boolean(p));
+  const related: Product[] = useMemo(() => {
+    if (!product) return [];
+    // Typed relationships first (DB product_relationships graph), then fill
+    // out with attribute-scored similar pieces from the live catalogue.
+    const linked = product.relationships
+      .map((r) => byId(r.targetId))
+      .filter((p): p is Product => Boolean(p));
+    const seen = new Set([product.id, ...linked.map((p) => p.id)]);
+    const extras = similarProducts(product, products.filter((p: Product) => !seen.has(p.id)));
+    return [...linked, ...extras].slice(0, 4);
+  }, [product, products, byId]);
 
   const notify = (msg: string) => {
     setToast(msg);

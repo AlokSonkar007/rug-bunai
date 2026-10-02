@@ -18,14 +18,16 @@ export class UnauthorizedError extends Error {
 
 async function assertAdmin(): Promise<void> {
   const supabase = requireSupabase();
-  const { data } = await supabase.auth.getSession();
+  const { data, error } = await supabase.auth.getSession();
+  rethrow('Could not read the current session', error);
   const uid = data.session?.user.id;
   if (!uid) throw new UnauthorizedError();
-  const { data: profile } = await supabase
+  const { data: profile, error: profErr } = await supabase
     .from('profiles')
     .select('role')
     .eq('id', uid)
     .maybeSingle();
+  rethrow('Could not read the user profile', profErr);
   if (profile?.role !== 'admin') throw new UnauthorizedError();
 }
 
@@ -37,6 +39,18 @@ const rethrow = (label: string, error: { message: string } | null): void => {
     throw new Error(`${label}: ${error.message}`);
   }
 };
+
+/**
+ * Narrow a `.single()` result after the error has been checked. PostgREST
+ * guarantees exactly one row when `error` is null, so this keeps the DB-backed
+ * return types non-nullable without unsafe casts — and throws a clear runtime
+ * error instead of handing callers `null`.
+ */
+function expectRow<T>(data: T | null, error: { message: string } | null, label: string): T {
+  rethrow(label, error);
+  if (data === null) throw new Error(`${label}: no row was returned.`);
+  return data;
+}
 
 // ── Products ──────────────────────────────────────────────────────────────────
 
@@ -53,8 +67,7 @@ export async function createProduct(draft: ProductDraft): Promise<ProductRow> {
     .insert({ ...draft, rating: 0, reviews_count: 0 })
     .select()
     .single();
-  rethrow('Could not create product', error);
-  return data;
+  return expectRow(data, error, 'Could not create product');
 }
 
 export async function updateProduct(id: string, patch: Partial<ProductRow>): Promise<void> {
@@ -81,7 +94,7 @@ export async function deleteProduct(id: string): Promise<{ removedFiles: number 
 
   const paths = (images ?? [])
     .map((i) => i.storage_path)
-    .filter((p): p is string => Boolean(p) && p.startsWith(`products/${id}/`)); // never touch unrelated files
+    .filter((p): p is string => typeof p === 'string' && p.startsWith(`products/${id}/`)); // never touch unrelated files
 
   let removedFiles = 0;
   if (paths.length > 0) {
@@ -108,8 +121,7 @@ export async function addVariant(draft: VariantDraft): Promise<VariantRow> {
     .insert({ stock: 0, sort: 99, ...draft, color_slug: normalizeColorSlug(draft.color_slug) })
     .select()
     .single();
-  rethrow('Could not add variant', error);
-  return data;
+  return expectRow(data, error, 'Could not add variant');
 }
 
 export async function updateVariant(id: string, patch: Partial<VariantRow>): Promise<void> {
@@ -183,11 +195,11 @@ export async function uploadProductImage(
   if (insErr) {
     // Roll back the just-uploaded object so no orphan files accumulate.
     await supabase.storage.from(PRODUCT_IMAGES_BUCKET).remove([path]);
-    rethrow('Could not register image', insErr);
   }
+  const imageRow = expectRow(row, insErr, 'Could not register image');
   opts.onProgress?.(1);
   const { data: pub } = supabase.storage.from(PRODUCT_IMAGES_BUCKET).getPublicUrl(path);
-  return { row, url: pub.publicUrl };
+  return { row: imageRow, url: pub.publicUrl };
 }
 
 /** Replace an existing image: upload new object, swap metadata, drop old object. */
