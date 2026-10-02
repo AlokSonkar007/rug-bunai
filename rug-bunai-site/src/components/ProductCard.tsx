@@ -32,8 +32,8 @@ export function Reveal({ children, delay = 0 }: { children: React.ReactNode; del
  */
 export function ProductCard({ product, eager = false }: { product: Product; eager?: boolean }) {
   const range = priceRange(product);
-  const tech = findTerm(TECHNIQUES, product.techniqueSlug)?.label;
-  const mat = findTerm(MATERIALS, product.materialSlug)?.label;
+  const tech = findTerm(TECHNIQUES, product.techniqueSlug)?.label ?? 'Handmade';
+  const mat = findTerm(MATERIALS, product.materialSlug)?.label ?? 'natural fibre';
   const sameSizeColors = [...new Set(product.variants.map((v) => v.colorSlug))];
   // 3 extra angle thumbnails beyond the hero (spec minimum), capped by design count
   const altAngles = [1, 2, 3].filter((i) => i < product.thumbnailCount);

@@ -196,8 +196,13 @@ export function runSearch(f: FacetState): { results: Product[]; facets: FacetGro
 }
 
 // ── Applied-filter chips ------------------------------------------------------------
+// A chip represents one *removable filter concept*. Most chips map 1:1 to a
+// FacetState key; price is a single logical chip that spans the paired
+// priceMin/priceMax keys, so it gets its own group id instead of leaking
+// internal state field names into the UI layer.
 
-export type Chip = { group: keyof FacetState & string; value: string; label: string };
+export type ChipGroup = Exclude<keyof FacetState, 'priceMin' | 'priceMax'> | 'price';
+export type Chip = { group: ChipGroup; value: string; label: string };
 
 const termLabel = (dict: readonly { slug: string; label: string }[], slug: string) =>
   dict.find((x) => x.slug === slug)?.label ?? slug;
