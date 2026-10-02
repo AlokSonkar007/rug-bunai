@@ -3,11 +3,20 @@
 // Hand-written to mirror the SQL exactly — regenerate with
 //   npx supabase gen types typescript --project-id <id> > src/lib/database.types.ts
 // once your project exists. Keep in sync with migrations.
+//
+// This file uses the canonical supabase-js GenericSchema shape so that
+// client.from('table') / .select() / .insert() / .update() are fully typed.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type UserRole = 'customer' | 'admin';
 
-export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[];
 
 export interface ProductSpecs extends Record<string, unknown> {
   pileHeightMm: number;
@@ -21,14 +30,9 @@ export interface ProductSpecs extends Record<string, unknown> {
   weaveMonthsApprox?: number;
 }
 
-export type Tables<T extends keyof Database['public']['Tables']> =
-  Database['public']['Tables'][T]['Row'];
-export type Inserts<T extends keyof Database['public']['Tables']> =
-  Database['public']['Tables'][T]['Insert'];
-export type Updates<T extends keyof Database['public']['Tables']> =
-  Database['public']['Tables'][T]['Update'];
+// ── Row shapes (what Postgres returns) ───────────────────────────────────────
 
-export interface Profile {
+export type Profile = {
   id: string;
   role: UserRole;
   full_name: string | null;
@@ -36,7 +40,7 @@ export interface Profile {
   updated_at: string;
 }
 
-export interface TermRow {
+export type TermRow = {
   id: number;
   kind: string;
   slug: string;
@@ -45,7 +49,7 @@ export interface TermRow {
   sort: number;
 }
 
-export interface CategoryRow {
+export type CategoryRow = {
   id: number;
   path: string;
   title: string;
@@ -53,7 +57,7 @@ export interface CategoryRow {
   sort: number;
 }
 
-export interface CollectionRow {
+export type CollectionRow = {
   id: string;
   slug: string;
   name: string;
@@ -62,7 +66,7 @@ export interface CollectionRow {
   created_at: string;
 }
 
-export interface ProductRow {
+export type ProductRow = {
   id: string;
   slug: string;
   name: string;
@@ -92,7 +96,7 @@ export interface ProductRow {
   updated_at: string;
 }
 
-export interface VariantRow {
+export type VariantRow = {
   id: string;
   product_id: string;
   sku: string;
@@ -108,7 +112,7 @@ export interface VariantRow {
   created_at: string;
 }
 
-export interface ProductImageRow {
+export type ProductImageRow = {
   id: string;
   product_id: string;
   storage_path: string | null;
@@ -119,41 +123,138 @@ export interface ProductImageRow {
   created_at: string;
 }
 
-export interface ProductCategoryRow {
+export type ProductCategoryRow = {
   product_id: string;
   category_path: string;
 }
 
-export interface ProductRelationshipRow {
+export type ProductRelationshipRow = {
   source_id: string;
   target_id: string;
   type: 'completes-the-look' | 'same-collection' | 'alternative';
   sort: number;
 }
 
-export interface WishlistItemRow {
+export type WishlistItemRow = {
   id: number;
   user_id: string;
   product_id: string;
   created_at: string;
 }
 
-export interface Database {
-  public: {
-    Tables: {
-      profiles: { Row: Profile; Insert: Partial<Profile> & Pick<Profile, 'id'>; Update: Partial<Profile> };
-      terms: { Row: TermRow; Insert: Partial<TermRow> & Pick<TermRow, 'kind' | 'slug' | 'label'>; Update: Partial<TermRow> };
-      categories: { Row: CategoryRow; Insert: CategoryRow; Update: Partial<CategoryRow> };
-      collections: { Row: CollectionRow; Insert: Partial<CollectionRow> & Pick<CollectionRow, 'slug' | 'name'>; Update: Partial<CollectionRow> };
-      products: { Row: ProductRow; Insert: Partial<ProductRow> & Pick<ProductRow, 'slug' | 'name'>; Update: Partial<ProductRow> };
-      variants: { Row: VariantRow; Insert: Partial<VariantRow> & Pick<VariantRow, 'product_id' | 'sku' | 'size_label' | 'color_slug' | 'price_inr'>; Update: Partial<VariantRow> };
-      product_images: { Row: ProductImageRow; Insert: Partial<ProductImageRow> & Pick<ProductImageRow, 'product_id'>; Update: Partial<ProductImageRow> };
-      product_categories: { Row: ProductCategoryRow; Insert: ProductCategoryRow; Update: Partial<ProductCategoryRow> };
-      product_relationships: { Row: ProductRelationshipRow; Insert: ProductRelationshipRow; Update: Partial<ProductRelationshipRow> };
-      wishlist_items: { Row: WishlistItemRow; Insert: Partial<WishlistItemRow> & Pick<WishlistItemRow, 'user_id' | 'product_id'>; Update: Partial<WishlistItemRow> };
-    };
-    Views: Record<never, never>;
-    Functions: Record<never, never>;
-    Enums: Record<never, never>;
+// ── Insert helpers ───────────────────────────────────────────────────────────
+// Defaults live in Postgres (ids, timestamps, booleans, counters), so most
+// columns are optional on insert; only genuinely required columns stay required.
+
+type Upsertable<Row, RequiredKeys extends keyof Row> = {
+  [K in keyof Row as K extends RequiredKeys ? K : never]: Row[K];
+} & {
+  [K in Exclude<keyof Row, RequiredKeys>]?: Row[K];
+};
+
+// NOTE: all row shapes below are declared as object *type aliases*, not
+// interfaces: postgrest-js requires Row/Insert/Update to be assignable to
+// Record<string, unknown>, and interfaces lack an implicit index signature.
+
+// ── Canonical Supabase schema descriptor ─────────────────────────────────────
+// NOTE: Views/Functions/Enums must be `Record<string, never>` (not indexed
+// interfaces) so the shape stays assignable to postgrest-js GenericSchema.
+
+export type DatabaseTables = {
+  profiles: {
+    Row: Profile;
+    Insert: Upsertable<Profile, 'id'>;
+    Update: Partial<Profile>;
+    Relationships: [];
   };
-}
+  terms: {
+    Row: TermRow;
+    Insert: Upsertable<TermRow, 'kind' | 'slug' | 'label'>;
+    Update: Partial<TermRow>;
+    Relationships: [];
+  };
+  categories: {
+    Row: CategoryRow;
+    Insert: Upsertable<CategoryRow, 'path' | 'title' | 'axis'>;
+    Update: Partial<CategoryRow>;
+    Relationships: [];
+  };
+  collections: {
+    Row: CollectionRow;
+    Insert: Upsertable<CollectionRow, 'slug' | 'name'>;
+    Update: Partial<CollectionRow>;
+    Relationships: [];
+  };
+  products: {
+    Row: ProductRow;
+    Insert: Upsertable<
+      ProductRow,
+      | 'slug'
+      | 'name'
+      | 'tagline'
+      | 'description'
+      | 'craft_story'
+      | 'material_slug'
+      | 'technique_slug'
+      | 'classification_slug'
+    >;
+    Update: Partial<ProductRow>;
+    Relationships: [];
+  };
+  variants: {
+    Row: VariantRow;
+    Insert: Upsertable<
+      VariantRow,
+      | 'product_id'
+      | 'sku'
+      | 'size_label'
+      | 'width_cm'
+      | 'length_cm'
+      | 'width_in'
+      | 'length_in'
+      | 'color_slug'
+      | 'price_inr'
+    >;
+    Update: Partial<VariantRow>;
+    Relationships: [];
+  };
+  product_images: {
+    Row: ProductImageRow;
+    Insert: Upsertable<ProductImageRow, 'product_id'>;
+    Update: Partial<ProductImageRow>;
+    Relationships: [];
+  };
+  product_categories: {
+    Row: ProductCategoryRow;
+    Insert: ProductCategoryRow;
+    Update: Partial<ProductCategoryRow>;
+    Relationships: [];
+  };
+  product_relationships: {
+    Row: ProductRelationshipRow;
+    Insert: ProductRelationshipRow;
+    Update: Partial<ProductRelationshipRow>;
+    Relationships: [];
+  };
+  wishlist_items: {
+    Row: WishlistItemRow;
+    Insert: Upsertable<WishlistItemRow, 'user_id' | 'product_id'>;
+    Update: Partial<WishlistItemRow>;
+    Relationships: [];
+  };
+};
+
+// Convenience accessors mirroring common generated-type helpers.
+export type Tables<T extends keyof DatabaseTables> = DatabaseTables[T]['Row'];
+export type Inserts<T extends keyof DatabaseTables> = DatabaseTables[T]['Insert'];
+export type Updates<T extends keyof DatabaseTables> = DatabaseTables[T]['Update'];
+
+export type Database = {
+  public: {
+    Tables: DatabaseTables;
+    Views: Record<string, never>;
+    Functions: Record<string, never>;
+    Enums: Record<string, never>;
+    CompositeTypes: Record<string, never>;
+  };
+};

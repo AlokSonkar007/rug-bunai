@@ -27,11 +27,17 @@ import { rugImage as seedRugImage } from './rugArt';
 
 // ── Row → view-model mapping ─────────────────────────────────────────────────
 
+/** Embedded product_relationships row as returned by Postgrest FK joins. */
+interface RelationshipEmbed {
+  type: RelationshipType;
+  target_product: ProductRow | null;
+}
+
 interface JoinedProductRow extends ProductRow {
   variants?: VariantRow[];
   product_images?: ProductImageRow[];
   product_categories?: { category_path: string }[];
-  target_product?: ProductRow | null;
+  product_relationships?: RelationshipEmbed[];
 }
 
 const COLOR_TO_SLUG = new Map(COLORS.map((c) => [c.slug.toLowerCase(), c.slug]));
@@ -71,17 +77,18 @@ function parseSpecs(raw: ProductSpecs | null | undefined): Specifications {
   }
   const n = (x: unknown, d: number): number => (typeof x === 'number' && Number.isFinite(x) ? x : d);
   const s = (x: unknown, d: string): string => (typeof x === 'string' && x ? x : d);
-  const specs: Specifications = {
+  // Build fully, then freeze once — Specifications is a readonly interface.
+  const mutable: Record<string, string | number> = {
     pileHeightMm: n(raw.pileHeightMm, 8),
     weightKgPerSqm: n(raw.weightKgPerSqm, 3.2),
     backing: s(raw.backing, 'Hand-finished cotton foundation'),
     countryOfOrigin: s(raw.countryOfOrigin, 'Bhadohi, Uttar Pradesh, India'),
     careInstructions: s(raw.careInstructions, 'Vacuum without beater bar; professional wash periodically.'),
   };
-  if (typeof raw.knotsPerSqIn === 'number') specs.knotsPerSqIn = raw.knotsPerSqIn;
-  if (typeof raw.warpMaterial === 'string') specs.warpMaterial = raw.warpMaterial;
-  if (typeof raw.weaveMonthsApprox === 'number') specs.weaveMonthsApprox = raw.weaveMonthsApprox;
-  return specs;
+  if (typeof raw.knotsPerSqIn === 'number') mutable.knotsPerSqIn = raw.knotsPerSqIn;
+  if (typeof raw.warpMaterial === 'string') mutable.warpMaterial = raw.warpMaterial;
+  if (typeof raw.weaveMonthsApprox === 'number') mutable.weaveMonthsApprox = raw.weaveMonthsApprox;
+  return Object.freeze(mutable) as unknown as Specifications;
 }
 
 const daysSince = (iso: string): number =>
@@ -92,9 +99,11 @@ export function mapProduct(row: JoinedProductRow): Product {
     .sort((a, b) => a.sort - b.sort)
     .map(mapVariant);
   const parentColors = [...new Set(variants.map((v) => v.colorSlug))];
-  const rel = row.target_product
-    ? [{ targetId: row.target_product.id, type: row.product_relationship_type satisfies RelationshipType }]
-    : [];
+  // Relationships arrive embedded via the products FK join; only keep ones
+  // whose target product actually resolved (published / still existing).
+  const rel = (row.product_relationships ?? [])
+    .filter((r): r is RelationshipEmbed & { target_product: ProductRow } => Boolean(r.target_product))
+    .map((r) => ({ targetId: r.target_product.id, type: r.type }));
   return {
     id: row.id,
     slug: row.slug,

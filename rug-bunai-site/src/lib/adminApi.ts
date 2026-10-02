@@ -18,8 +18,8 @@ export class UnauthorizedError extends Error {
 
 async function assertAdmin(): Promise<void> {
   const supabase = requireSupabase();
-  const { data: sub } = await supabase.auth.getSession();
-  const uid = sub.user?.id;
+  const { data } = await supabase.auth.getSession();
+  const uid = data.session?.user.id;
   if (!uid) throw new UnauthorizedError();
   const { data: profile } = await supabase
     .from('profiles')
