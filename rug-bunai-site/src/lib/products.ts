@@ -23,7 +23,7 @@ import type {
 import type { Product, RelationshipType, Specifications, Variant } from '../data/products';
 import { SEED_PRODUCTS } from '../data/seedProducts';
 import { COLORS } from '../data/vocabularies';
-import { rugImage as seedRugImage } from './rugArt';
+import { productRugImage as seedRugImage } from './rugArt';
 
 // ── Row → view-model mapping ─────────────────────────────────────────────────
 
@@ -201,6 +201,18 @@ export function galleryImages(product: Product): ProductImageRow[] {
     alt: null,
     created_at: new Date().toISOString(),
   }));
+}
+
+/**
+ * Display URL for one gallery angle of a product — Supabase Storage photo when
+ * an uploaded image row exists, deterministic SVG weaving otherwise. All pages
+ * render imagery through this instead of the raw generator.
+ */
+export function productPhoto(product: Product, angleIndex = 0, w = 900, h = 620): string {
+  const imgs = galleryImages(product);
+  const img = imgs[angleIndex % imgs.length];
+  if (img?.storage_path && isSupabaseConfigured) return productImageUrl(product, img);
+  return seedRugImage(product, angleIndex, w, h);
 }
 
 // ── Queries ───────────────────────────────────────────────────────────────────

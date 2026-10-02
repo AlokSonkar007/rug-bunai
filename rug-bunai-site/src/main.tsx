@@ -10,6 +10,8 @@ import StoryPage from './pages/StoryPage';
 import ContactPage, { NotFound } from './pages/InfoPages';
 import { CartPage, CheckoutPage } from './pages/CartPages';
 import { CartProvider } from './lib/cart';
+import { AuthProvider } from './lib/auth';
+import { CatalogueProvider } from './lib/catalog';
 import './index.css';
 
 const router = createBrowserRouter([
@@ -33,8 +35,12 @@ const router = createBrowserRouter([
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <CartProvider>
-      <RouterProvider router={router} />
-    </CartProvider>
+    <AuthProvider>
+      <CatalogueProvider>
+        <CartProvider>
+          <RouterProvider router={router} />
+        </CartProvider>
+      </CatalogueProvider>
+    </AuthProvider>
   </StrictMode>,
 );

@@ -1,7 +1,8 @@
 import { Link } from 'react-router-dom';
-import { PRODUCTS, getProduct } from '../data/products';
+import type { Product } from '../data/products';
 import { ROOMS, TECHNIQUES } from '../data/vocabularies';
-import { rugImage } from '../lib/rugArt';
+import { productPhoto } from '../lib/products';
+import { useProducts } from '../lib/catalog';
 import { ProductCard, Reveal } from '../components/ProductCard';
 import { productsInCategory } from '../lib/search';
 
@@ -9,10 +10,24 @@ import { productsInCategory } from '../lib/search';
  * Homepage narrative follows the "archival luxury" directive: the hero tells
  * the story of Bhadohi's weaving tradition — the 1982 founding date appears
  * only as supporting evidence of longevity, never as the headline.
+ *
+ * All imagery & product references come from the shared database-backed
+ * catalogue (CatalogueProvider → Supabase products, seeded demo rows locally).
  */
 export default function HomePage() {
-  const hero = getProduct('kashmiri-rose-medallion')!;
-  const bestSellers = PRODUCTS.filter((p) => p.bestSellerRank).slice(0, 3);
+  const { products, bySlug } = useProducts();
+
+  // Editorial anchors: named designs when present in the live catalogue,
+  // deterministic fallbacks so the page renders identically while the
+  // catalogue is still loading or those designs have been retired.
+  const pick = (slug: string, fallbackIndex: number): Product =>
+    bySlug(slug) ?? products[fallbackIndex] ?? products[0];
+
+  const hero = pick('kashmiri-rose-medallion', 0);
+  const bestSellers = products
+    .filter((p: Product) => p.bestSellerRank)
+    .sort((a: Product, b: Product) => (a.bestSellerRank ?? 99) - (b.bestSellerRank ?? 99))
+    .slice(0, 3);
   const techniqueTiles = [
     { tech: TECHNIQUES[0], path: 'rugs/hand-knotted/wool', blurb: 'A knot for every pixel' },
     { tech: TECHNIQUES[1], path: 'rugs/hand-tufted/wool', blurb: 'Carved relief, punched by hand' },
@@ -21,7 +36,7 @@ export default function HomePage() {
   ];
   const roomTiles = ROOMS.map((room, i) => ({
     room,
-    sample: productsInCategory(`rugs/${room.slug}`)[0] ?? PRODUCTS[i % PRODUCTS.length],
+    sample: productsInCategory(products, `rugs/${room.slug}`)[0] ?? products[i % products.length],
   }));
 
   return (
@@ -29,7 +44,7 @@ export default function HomePage() {
       {/* Hero */}
       <section className="hero">
         <div className="hero-art" aria-hidden="true">
-          <img src={rugImage(hero, 4, 1600, 900)} alt="" />
+          <img src={productPhoto(hero, 4, 1600, 900)} alt="" />
         </div>
         <div className="hero-inner">
           <p className="eyebrow">The Weaving Coast of Uttar Pradesh</p>
@@ -69,11 +84,11 @@ export default function HomePage() {
         </Reveal>
         <div className="tiles">
           {techniqueTiles.map(({ tech, path, blurb }, i) => {
-            const sample = productsInCategory(path)[0];
+            const sample = productsInCategory(products, path)[0];
             return (
               <Reveal key={tech.slug} delay={i * 80}>
                 <Link to={`/c/${path}`} className="tile">
-                  <img src={rugImage(sample ?? PRODUCTS[0], 0, 480, 640)} alt={`${tech.label} rug detail`} loading="lazy" />
+                  <img src={productPhoto(sample ?? products[0], 0, 480, 640)} alt={`${tech.label} rug detail`} loading="lazy" />
                   <figcaption><em>{tech.label}</em>{blurb}</figcaption>
                 </Link>
               </Reveal>
@@ -86,7 +101,7 @@ export default function HomePage() {
       <section className="wrap section">
         <div className="split">
           <div className="media">
-            <img src={rugImage(getProduct('mughal-garden-floral')!, 1, 900, 680)} alt="Macro view of a hand-knotted wool pile showing individual knots" loading="lazy" />
+            <img src={productPhoto(pick('mughal-garden-floral', 1), 1, 900, 680)} alt="Macro view of a hand-knotted wool pile showing individual knots" loading="lazy" />
           </div>
           <div className="split-body">
             <p className="eyebrow">The Persian Knot</p>
@@ -141,8 +156,8 @@ export default function HomePage() {
             {roomTiles.map(({ room, sample }, i) => (
               <Reveal key={room.slug} delay={i * 70}>
                 <Link to={`/rugs?room=${room.slug}`} className="tile">
-                  <img src={rugImage(sample, 4, 420, 560)} alt={`${room.label} styled with a Rug Bunai piece`} loading="lazy" />
-                  <figcaption><em>{room.label}</em>{productsInCategory(`rugs/${room.slug}`).length} designs</figcaption>
+                  <img src={productPhoto(sample, 4, 420, 560)} alt={`${room.label} styled with a Rug Bunai piece`} loading="lazy" />
+                  <figcaption><em>{room.label}</em>{productsInCategory(products, `rugs/${room.slug}`).length} designs</figcaption>
                 </Link>
               </Reveal>
             ))}
@@ -154,7 +169,7 @@ export default function HomePage() {
       <section className="wrap section">
         <div className="split flip">
           <div className="media">
-            <img src={rugImage(getProduct('desert-line-geometric')!, 4, 900, 680)} alt="Geometric tonal rug staged in a minimalist living room" loading="lazy" />
+            <img src={productPhoto(pick('desert-line-geometric', 2), 4, 900, 680)} alt="Geometric tonal rug staged in a minimalist living room" loading="lazy" />
           </div>
           <div className="split-body">
             <p className="eyebrow">Interior Inspiration</p>
