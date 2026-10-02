@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { formatINR } from '../data/products';
 import { variantById, useCart } from '../lib/cart';
-import { rugImage } from '../lib/rugArt';
+import { productPhoto } from '../lib/products';
 
 export function CartPage() {
   const cart = useCart();
@@ -33,7 +33,7 @@ export function CartPage() {
         <div>
           {lines.map((l) => (
             <div className="cart-line" key={l.variant.id}>
-              <img src={rugImage(l.product, 0, 220, 165)} alt={`${l.product.name} thumbnail`} loading="lazy" />
+              <img src={productPhoto(l.product, 0, 220, 165)} alt={`${l.product.name} thumbnail`} loading="lazy" />
               <div>
                 <h2 className="subhead"><Link to={`/rugs/${l.product.slug}`}>{l.product.name}</Link></h2>
                 <p className="card-meta">{l.variant.sizeLabel} · colour {l.variant.colorSlug.replace(/-/g, ' ')}</p>
@@ -183,7 +183,7 @@ export function CheckoutPage() {
           <h2 className="subhead" style={{ marginBottom: 14 }}>Order summary</h2>
           {lines.map((l) => (
             <div key={l.variant.id} style={{ display: 'flex', gap: 12, marginBottom: 14, alignItems: 'center' }}>
-              <img src={rugImage(l.product, 0, 96, 72)} alt="" width={56} height={42} style={{ objectFit: 'cover' }} loading="lazy" />
+              <img src={productPhoto(l.product, 0, 96, 72)} alt="" width={56} height={42} style={{ objectFit: 'cover' }} loading="lazy" />
               <div style={{ flex: 1 }}>
                 <p style={{ fontFamily: 'var(--serif)' }}>{l.product.name}</p>
                 <p className="card-meta">{l.variant.sizeLabel} × {l.qty}</p>

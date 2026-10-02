@@ -1,6 +1,6 @@
 import { Link, useParams } from 'react-router-dom';
-import { getProduct, PRODUCTS, type Product } from '../data/products';
-import { rugImage } from '../lib/rugArt';
+import { productPhoto } from '../lib/products';
+import { useProducts } from '../lib/catalog';
 import { Reveal } from '../components/ProductCard';
 
 // ── Journal content model (Sanity "post" documents in production) ────────────
@@ -86,6 +86,7 @@ const POSTS: readonly Post[] = [
 ];
 
 export function JournalPage() {
+  const { products, bySlug } = useProducts();
   return (
     <div className="wrap section">
       <header style={{ marginBottom: 50 }}>
@@ -98,12 +99,12 @@ export function JournalPage() {
       </header>
       <div className="journal-grid">
         {POSTS.map((post, i) => {
-          const linked: Product = (post.linkedRugSlug ? getProduct(post.linkedRugSlug) : undefined) ?? PRODUCTS[i % PRODUCTS.length];
+          const linked = (post.linkedRugSlug ? bySlug(post.linkedRugSlug) : undefined) ?? products[i % products.length];
           return (
             <Reveal key={post.slug} delay={i * 80}>
               <article className="post-card card">
                 <Link to={`/journal/${post.slug}`}>
-                  <img src={rugImage(linked, 4, 640, 400)} alt="" loading="lazy" />
+                  <img src={productPhoto(linked, 4, 640, 400)} alt="" loading="lazy" />
                 </Link>
                 <div className="card-body">
                   <p className="eyebrow">{post.pillar} · {post.minutes} min</p>

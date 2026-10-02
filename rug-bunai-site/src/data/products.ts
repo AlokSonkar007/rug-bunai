@@ -438,7 +438,13 @@ export const SEED_PRODUCTS: readonly Product[] = SEED_PRODUCTS_RAW;
 
 // ── Derived accessors ---------------------------------------------------------
 
+/** Full seed catalogue as a plain array (alias kept for page imports). */
+export const PRODUCTS: readonly Product[] = SEED_PRODUCTS;
+
 export const getSeedProduct = (slug: string) => SEED_PRODUCTS.find((p) => p.slug === slug);
+
+/** Look up a seed product by slug (returns undefined when not found). */
+export const getProduct = (slug: string) => getSeedProduct(slug);
 
 export const priceRange = (p: Product) => {
   const prices = p.variants.map((v) => v.priceInr);

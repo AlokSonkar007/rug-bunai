@@ -29,6 +29,9 @@ function rng(seed: string) {
   };
 }
 
+/** Alias kept for pages that import the generator as `rugImage`. */
+export const rugImage = productRugImage;
+
 export function productRugImage(product: Product, angleIndex = 0, w = 900, h = 620): string {
   const variantColor = product.colorSlugs[angleIndex % product.colorSlugs.length];
   const accent = COLOR_HEX[variantColor] ?? '#8A6B4F';
