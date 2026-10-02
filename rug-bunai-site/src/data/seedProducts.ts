@@ -68,26 +68,6 @@ export interface Product {
   readonly reviewsCount: number;
   readonly bestSellerRank?: number;
   readonly addedDaysAgo: number;
-  // ── Database-driven fields (optional so the seed file stays valid) ────────
-  readonly isPublished?: boolean;
-  readonly isFeatured?: boolean;
-  readonly isLatest?: boolean;
-  readonly featuredOrder?: number;
-  readonly latestOrder?: number;
-  readonly sortOrder?: number;
-  readonly tags?: readonly string[];
-  readonly collectionId?: string | null;
-  /** Gallery metadata rows (Supabase product_images); binaries live in Storage. */
-  readonly images?: readonly {
-    readonly id: string;
-    readonly product_id: string;
-    readonly storage_path: string | null;
-    readonly seed_angle: number;
-    readonly is_primary: boolean;
-    readonly sort: number;
-    readonly alt: string | null;
-    readonly created_at: string;
-  }[];
   readonly imageSeed: string;
   readonly thumbnailCount: number; // 5–15 macro/lifestyle angles per spec
   readonly relationships: readonly ProductRelationship[];
@@ -126,7 +106,7 @@ export function validateProduct(p: Product): void {
 
 // ── Catalogue ----------------------------------------------------------------
 
-const SEED_PRODUCTS_RAW = [
+export const SEED_PRODUCTS: readonly Product[] = [
   {
     id: 'p-kashmir-rose',
     slug: 'kashmiri-rose-medallion',
@@ -431,14 +411,11 @@ const SEED_PRODUCTS_RAW = [
   },
 ] as const;
 
-SEED_PRODUCTS_RAW.forEach(validateProduct);
-
-/** Immutable demo/fallback catalogue — mirrored by supabase/seed.sql. */
-export const SEED_PRODUCTS: readonly Product[] = SEED_PRODUCTS_RAW;
+SEED_PRODUCTS.forEach(validateProduct);
 
 // ── Derived accessors ---------------------------------------------------------
 
-export const getSeedProduct = (slug: string) => SEED_PRODUCTS.find((p) => p.slug === slug);
+export const getProduct = (slug: string) => SEED_PRODUCTS.find((p) => p.slug === slug);
 
 export const priceRange = (p: Product) => {
   const prices = p.variants.map((v) => v.priceInr);
