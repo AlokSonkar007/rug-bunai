@@ -7,7 +7,12 @@ import { rugImage } from '../lib/rugArt';
 export function CartPage() {
   const cart = useCart();
   const navigate = useNavigate();
-  const lines = cart.lines.map((l) => ({ ...l, ...variantById(l.variantId)! })).filter((l) => l.product);
+  // Stale localStorage lines (removed designs/variants) resolve to undefined;
+  // drop them via a type guard so downstream rendering sees complete lines only.
+  const lines = cart.lines.flatMap((l) => {
+    const resolved = variantById(l.variantId);
+    return resolved ? [{ ...resolved, qty: l.qty }] : [];
+  });
 
   if (lines.length === 0) {
     return (
@@ -68,13 +73,16 @@ type Errors = Partial<Record<'email' | 'name' | 'address' | 'city' | 'pin' | 'ca
 
 export function CheckoutPage() {
   const cart = useCart();
-  const navigate = useNavigate();
   const [placed, setPlaced] = useState<string | null>(null);
   const [errors, setErrors] = useState<Errors>({});
   const [form, setForm] = useState({ email: '', name: '', address: '', city: '', pin: '', card: '' });
 
   const lines = useMemo(
-    () => cart.lines.map((l) => ({ ...l, ...(variantById(l.variantId) ?? { product: undefined, variant: undefined }) })).filter((l) => l.product && l.variant),
+    () =>
+      cart.lines.flatMap((l) => {
+        const resolved = variantById(l.variantId);
+        return resolved ? [{ ...resolved, qty: l.qty }] : [];
+      }),
     [cart.lines],
   );
 
