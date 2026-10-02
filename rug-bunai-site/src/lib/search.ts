@@ -7,7 +7,7 @@
 //    canonical + noindex guidance for filtered URLs is documented server-side.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { PRODUCTS, priceRange, type Product, type Variant } from '../data/products';
+import { priceRange, type Product, type Variant } from '../data/products';
 import { COLORS, MATERIALS, ROOMS, STYLES, TECHNIQUES } from '../data/vocabularies';
 
 export type SortKey = 'relevance' | 'price-asc' | 'price-desc' | 'rating' | 'best-selling' | 'newest';
@@ -128,6 +128,7 @@ export type FacetOption = { slug: string; label: string; count: number; extra?: 
 export type FacetGroup = { id: keyof FacetState & string; label: string; options: FacetOption[] };
 
 function countFor(
+  pool: readonly Product[],
   dimension: 'techniques' | 'materials' | 'colors' | 'rooms' | 'styles',
   dict: readonly { slug: string; label: string }[],
   f: FacetState,
@@ -136,7 +137,8 @@ function countFor(
   // then test membership in this dimension.
   const relaxed: FacetState = { ...f, [dimension]: [] };
   return dict.map((term) => {
-    const pool = PRODUCTS.filter((p) => {
+    const matched = pool.filter((p) => {
+      if (p.isPublished === false) return false;
       if (!matchesAll(p, relaxed)) return false;
       switch (dimension) {
         case 'techniques': return p.techniqueSlug === term.slug;
@@ -146,26 +148,26 @@ function countFor(
         case 'styles': return p.styleSlugs.includes(term.slug);
       }
     });
-    return { slug: term.slug, label: term.label, count: pool.length };
+    return { slug: term.slug, label: term.label, count: matched.length };
   });
 }
 
-export function computeFacets(f: FacetState): FacetGroup[] {
+export function computeFacets(pool: readonly Product[], f: FacetState): FacetGroup[] {
   const sizeOptions = SIZE_BUCKETS.map((b) => ({
     slug: b.key,
     label: b.label,
-    count: PRODUCTS.filter(
-      (p) => matchesAll(p, f) && p.variants.some((v) => bucketOf(v) === b.key),
+    count: pool.filter(
+      (p) => p.isPublished !== false && matchesAll(p, f) && p.variants.some((v) => bucketOf(v) === b.key),
     ).length,
   }));
 
   return [
-    { id: 'techniques', label: 'Technique', options: countFor('techniques', TECHNIQUES, f) },
-    { id: 'materials', label: 'Material', options: countFor('materials', MATERIALS, f) },
-    { id: 'colors', label: 'Colour', options: countFor('colors', COLORS, f) },
+    { id: 'techniques', label: 'Technique', options: countFor(pool, 'techniques', TECHNIQUES, f) },
+    { id: 'materials', label: 'Material', options: countFor(pool, 'materials', MATERIALS, f) },
+    { id: 'colors', label: 'Colour', options: countFor(pool, 'colors', COLORS, f) },
     { id: 'sizeBucket', label: 'Size', options: sizeOptions },
-    { id: 'rooms', label: 'Room', options: countFor('rooms', ROOMS, f) },
-    { id: 'styles', label: 'Style', options: countFor('styles', STYLES, f) },
+    { id: 'rooms', label: 'Room', options: countFor(pool, 'rooms', ROOMS, f) },
+    { id: 'styles', label: 'Style', options: countFor(pool, 'styles', STYLES, f) },
   ];
 }
 
@@ -174,8 +176,11 @@ export function computeFacets(f: FacetState): FacetGroup[] {
 const relevanceScore = (p: Product) =>
   p.rating * 2 + (p.bestSellerRank ? 1 / p.bestSellerRank : 0) + p.reviewsCount / 500;
 
-export function runSearch(f: FacetState): { results: Product[]; facets: FacetGroup[]; total: number } {
-  let results = PRODUCTS.filter((p) => matchesAll(p, f));
+export function runSearch(
+  pool: readonly Product[],
+  f: FacetState,
+): { results: Product[]; facets: FacetGroup[]; total: number } {
+  let results = pool.filter((p) => p.isPublished !== false && matchesAll(p, f));
   switch (f.sort) {
     case 'price-asc':
       results = [...results].sort((a, b) => priceRange(a).min - priceRange(b).min); break;
@@ -192,7 +197,7 @@ export function runSearch(f: FacetState): { results: Product[]; facets: FacetGro
     default:
       results = [...results].sort((a, b) => relevanceScore(b) - relevanceScore(a));
   }
-  return { results, facets: computeFacets(f), total: results.length };
+  return { results, facets: computeFacets(pool, f), total: results.length };
 }
 
 // ── Applied-filter chips ------------------------------------------------------------
@@ -245,8 +250,8 @@ export function removeChip(f: FacetState, chip: Chip): FacetState {
 // ── Category browsing (dual-axis taxonomy) --------------------------------------------
 // A product may live on several category paths without duplication in the data model.
 
-export function productsInCategory(path: string): Product[] {
-  return PRODUCTS.filter((p) => p.categoryPaths.includes(path));
+export function productsInCategory(pool: readonly Product[], path: string): Product[] {
+  return pool.filter((p) => p.isPublished !== false && p.categoryPaths.includes(path));
 }
 
 export const CATEGORY_TITLES: Record<string, string> = {

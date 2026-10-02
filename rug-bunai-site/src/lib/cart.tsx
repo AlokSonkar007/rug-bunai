@@ -1,8 +1,26 @@
-// Minimal cart store — localStorage-backed, context-provided.
-// In production this maps to Shopify Storefront API cart lines.
+// Cart store — localStorage-backed, context-provided. Variant lookups go
+// through a registry that the DB-backed catalogue keeps refreshed, so cart
+// contents resolve against live (database) products, not hardcoded data.
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { PRODUCTS } from '../data/products';
+import type { Product, Variant } from '../data/products';
+
+// ── Live variant registry (populated by CatalogueProvider on every load) ─────
+const variantRegistry = new Map<string, { product: Product; variant: Variant }>();
+
+let registryNonce = 0;
+
+export function syncVariantRegistry(products: readonly Product[]): void {
+  variantRegistry.clear();
+  for (const p of products) for (const v of p.variants) variantRegistry.set(v.id, { product: p, variant: v });
+  registryNonce += 1;
+  notifyRegistry();
+}
+
+const registryListeners = new Set<() => void>();
+function notifyRegistry(): void {
+  for (const l of registryListeners) l();
+}
 
 export interface CartLine {
   readonly variantId: string;
@@ -24,6 +42,13 @@ type CartCtx = {
 const Ctx = createContext<CartCtx | null>(null);
 
 export function CartProvider({ children }: { children: ReactNode }) {
+  const [nonce, setNonce] = useState(registryNonce);
+  useEffect(() => {
+    const bump = () => setNonce((n) => n + 1);
+    registryListeners.add(bump);
+    return () => { registryListeners.delete(bump); };
+  }, []);
+
   const [lines, setLines] = useState<CartLine[]>(() => {
     try {
       return JSON.parse(localStorage.getItem(KEY) ?? '[]') as CartLine[];
@@ -37,13 +62,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, [lines]);
 
   const value = useMemo<CartCtx>(() => {
-    const findVariant = (id: string) => {
-      for (const p of PRODUCTS) {
-        const v = p.variants.find((x) => x.id === id);
-        if (v) return v;
-      }
-      return undefined;
-    };
+    const findVariant = (id: string) => variantRegistry.get(id)?.variant;
+    void nonce; // recompute totals whenever the live catalogue changes
     return {
       lines,
       add: (variantId) =>
@@ -64,7 +84,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       count: lines.reduce((n, l) => n + l.qty, 0),
       subtotalInr: lines.reduce((sum, l) => sum + (findVariant(l.variantId)?.priceInr ?? 0) * l.qty, 0),
     };
-  }, [lines]);
+  }, [lines, nonce]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
@@ -76,9 +96,5 @@ export const useCart = (): CartCtx => {
 };
 
 export function variantById(id: string) {
-  for (const p of PRODUCTS) {
-    const v = p.variants.find((x) => x.id === id);
-    if (v) return { product: p, variant: v };
-  }
-  return undefined;
+  return variantRegistry.get(id);
 }
