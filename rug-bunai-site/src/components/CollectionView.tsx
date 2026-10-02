@@ -130,7 +130,7 @@ export default function CollectionView({ categoryPath }: { categoryPath?: string
     return next;
   }, [baseState, categoryPath]);
 
-  const { results, facets, total } = useMemo(() => runSearch(constrained), [constrained]);
+  const { results, facets, total } = useMemo(() => runSearch(products, constrained), [products, constrained]);
   const chips = appliedChips(constrained);
 
   const update = (next: FacetState) => setSp(facetsToSearch(next), { replace: false });

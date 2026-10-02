@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { formatINR, type Product, type Variant } from '../data/products';
 import { CLASSIFICATIONS, colorHex, findTerm, MATERIALS, TECHNIQUES } from '../data/vocabularies';
 import { productPhoto, similarProducts } from '../lib/products';
+import { rugImage } from '../lib/rugArt';
 import { useProducts } from '../lib/catalog';
 import { useCart } from '../lib/cart';
 import { ProductCard, Reveal } from '../components/ProductCard';
@@ -91,7 +92,7 @@ export default function ProductPage() {
         {/* Gallery — thumbnail strip exposes every angle (5–15 per spec) */}
         <section aria-label={`Photography of ${product.name}`}>
           <div className={`gallery-main ${zoom ? 'zoomed' : ''}`} onClick={() => setZoom((z) => !z)} title={zoom ? 'Click to zoom out' : 'Click to zoom into weave detail'}>
-            <img src={rugImage(product, angle, 1200, 900)} alt={`${product.name} — view ${angle + 1} of ${product.thumbnailCount}`} />
+            <img src={productPhoto(product, angle, 1200, 900)} alt={`${product.name} — view ${angle + 1} of ${product.thumbnailCount}`} />
           </div>
           <div className="gallery-thumbs" role="tablist" aria-label="Product views">
             {Array.from({ length: product.thumbnailCount }, (_, i) => (
@@ -103,7 +104,7 @@ export default function ProductPage() {
                 aria-label={`View ${i + 1}: ${['full rug', 'weave macro', 'corner detail', 'fringe finish', 'styled in room'][i % 5]}`}
                 onClick={() => { setAngle(i); setZoom(false); }}
               >
-                <img src={rugImage(product, i, 184, 184)} alt="" loading="lazy" />
+                <img src={productPhoto(product, i, 184, 184)} alt="" loading="lazy" />
               </button>
             ))}
           </div>
