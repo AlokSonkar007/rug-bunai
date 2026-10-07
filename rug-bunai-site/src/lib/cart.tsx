@@ -69,6 +69,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       return;
     }
     const persist = async () => {
+      if (!supabase) return;
       const { error: clearError } = await supabase.from('cart_items').delete().eq('user_id', user.id);
       if (clearError) return;
       if (lines.length) {
