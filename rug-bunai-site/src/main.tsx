@@ -9,7 +9,13 @@ import { ArticlePage, JournalPage } from './pages/JournalPage';
 import StoryPage from './pages/StoryPage';
 import ContactPage, { NotFound } from './pages/InfoPages';
 import { CartPage, CheckoutPage } from './pages/CartPages';
+import { LoginPage } from './pages/AuthPages';
+import WishlistPage from './pages/WishlistPage';
+import AdminPage from './pages/AdminPage';
+import { AuthProvider } from './lib/auth';
+import { CatalogProvider } from './lib/catalog';
 import { CartProvider } from './lib/cart';
+import { WishlistProvider } from './lib/wishlist';
 import './index.css';
 
 const router = createBrowserRouter([
@@ -25,6 +31,10 @@ const router = createBrowserRouter([
       { path: 'story', element: <StoryPage /> },
       { path: 'cart', element: <CartPage /> },
       { path: 'checkout', element: <CheckoutPage /> },
+      { path: 'wishlist', element: <WishlistPage /> },
+      { path: 'login', element: <LoginPage /> },
+      { path: 'admin/login', element: <LoginPage adminOnly /> },
+      { path: 'admin', element: <AdminPage /> },
       { path: 'contact', element: <ContactPage /> },
       { path: '*', element: <NotFound /> },
     ],
@@ -33,8 +43,14 @@ const router = createBrowserRouter([
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <CartProvider>
-      <RouterProvider router={router} />
-    </CartProvider>
+    <AuthProvider>
+      <CatalogProvider>
+        <CartProvider>
+          <WishlistProvider>
+            <RouterProvider router={router} />
+          </WishlistProvider>
+        </CartProvider>
+      </CatalogProvider>
+    </AuthProvider>
   </StrictMode>,
 );

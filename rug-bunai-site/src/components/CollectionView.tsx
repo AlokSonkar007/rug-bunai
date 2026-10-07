@@ -7,6 +7,7 @@ import {
 } from '../lib/search';
 import { CATEGORY_TITLES, productsInCategory } from '../lib/search';
 import { ProductCard, Reveal } from './ProductCard';
+import { useCatalog } from '../lib/catalog';
 
 /** One facet group: multi-select checkboxes, dynamic counts, progressive disclosure. */
 function FacetBlock({
@@ -110,6 +111,7 @@ export function FilterPanel({
 export default function CollectionView({ categoryPath }: { categoryPath?: string }) {
   const [sp, setSp] = useSearchParams();
   const [sheetOpen, setSheetOpen] = useState(false);
+  const { products } = useCatalog();
 
   const baseState = useMemo<FacetState>(() => facetsFromSearch(sp), [sp]);
   // Category acts as an additional fixed technique/material/room constraint.
@@ -130,7 +132,7 @@ export default function CollectionView({ categoryPath }: { categoryPath?: string
     return next;
   }, [baseState, categoryPath]);
 
-  const { results, facets, total } = useMemo(() => runSearch(constrained), [constrained]);
+  const { results, facets, total } = useMemo(() => runSearch(constrained, products), [constrained, products]);
   const chips = appliedChips(constrained);
 
   const update = (next: FacetState) => setSp(facetsToSearch(next), { replace: false });

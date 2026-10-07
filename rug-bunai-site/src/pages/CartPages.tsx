@@ -1,18 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { formatINR } from '../data/products';
-import { variantById, useCart } from '../lib/cart';
-import { rugImage } from '../lib/rugArt';
+import { useCart } from '../lib/cart';
+import { productImage } from '../lib/images';
 
 export function CartPage() {
   const cart = useCart();
   const navigate = useNavigate();
-  // Stale localStorage lines (removed designs/variants) resolve to undefined;
-  // drop them via a type guard so downstream rendering sees complete lines only.
-  const lines = cart.lines.flatMap((l) => {
-    const resolved = variantById(l.variantId);
-    return resolved ? [{ ...resolved, qty: l.qty }] : [];
-  });
+  const lines = cart.items;
 
   if (lines.length === 0) {
     return (
@@ -33,7 +28,7 @@ export function CartPage() {
         <div>
           {lines.map((l) => (
             <div className="cart-line" key={l.variant.id}>
-              <img src={rugImage(l.product, 0, 220, 165)} alt={`${l.product.name} thumbnail`} loading="lazy" />
+              <img src={productImage(l.product, 0, 220, 165)} alt={`${l.product.name} thumbnail`} loading="lazy" />
               <div>
                 <h2 className="subhead"><Link to={`/rugs/${l.product.slug}`}>{l.product.name}</Link></h2>
                 <p className="card-meta">{l.variant.sizeLabel} · colour {l.variant.colorSlug.replace(/-/g, ' ')}</p>
@@ -77,14 +72,7 @@ export function CheckoutPage() {
   const [errors, setErrors] = useState<Errors>({});
   const [form, setForm] = useState({ email: '', name: '', address: '', city: '', pin: '', card: '' });
 
-  const lines = useMemo(
-    () =>
-      cart.lines.flatMap((l) => {
-        const resolved = variantById(l.variantId);
-        return resolved ? [{ ...resolved, qty: l.qty }] : [];
-      }),
-    [cart.lines],
-  );
+  const lines = cart.items;
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -183,7 +171,7 @@ export function CheckoutPage() {
           <h2 className="subhead" style={{ marginBottom: 14 }}>Order summary</h2>
           {lines.map((l) => (
             <div key={l.variant.id} style={{ display: 'flex', gap: 12, marginBottom: 14, alignItems: 'center' }}>
-              <img src={rugImage(l.product, 0, 96, 72)} alt="" width={56} height={42} style={{ objectFit: 'cover' }} loading="lazy" />
+              <img src={productImage(l.product, 0, 96, 72)} alt="" width={56} height={42} style={{ objectFit: 'cover' }} loading="lazy" />
               <div style={{ flex: 1 }}>
                 <p style={{ fontFamily: 'var(--serif)' }}>{l.product.name}</p>
                 <p className="card-meta">{l.variant.sizeLabel} × {l.qty}</p>

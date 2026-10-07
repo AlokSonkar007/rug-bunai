@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { formatINR, getProduct, PRODUCTS } from '../data/products';
+import { formatINR } from '../data/products';
 import { CLASSIFICATIONS, colorHex, findTerm, MATERIALS, TECHNIQUES } from '../data/vocabularies';
-import { rugImage } from '../lib/rugArt';
+import { productImage } from '../lib/images';
+import { useCatalog } from '../lib/catalog';
+import { useWishlist } from '../lib/wishlist';
 import { useCart } from '../lib/cart';
 import { ProductCard, Reveal } from '../components/ProductCard';
 
@@ -13,7 +15,9 @@ import { ProductCard, Reveal } from '../components/ProductCard';
  */
 export default function ProductPage() {
   const { slug } = useParams();
-  const product = getProduct(slug ?? '');
+  const { products } = useCatalog();
+  const { has, toggle } = useWishlist();
+  const product = products.find((candidate) => candidate.slug === (slug ?? ''));
   const [angle, setAngle] = useState(0);
   const [zoom, setZoom] = useState(false);
   const [color, setColor] = useState(product?.colorSlugs[0] ?? '');
@@ -53,7 +57,7 @@ export default function ProductPage() {
   const mat = findTerm(MATERIALS, product.materialSlug)?.label ?? '';
   const classification = findTerm(CLASSIFICATIONS, product.classificationSlug)?.label ?? '';
   const related = product.relationships
-    .map((r) => getProduct(PRODUCTS.find((p) => p.id === r.targetId)?.slug ?? ''))
+    .map((r) => products.find((candidate) => candidate.id === r.targetId))
     .filter((p): p is NonNullable<typeof p> => Boolean(p));
 
   const notify = (msg: string) => {
@@ -80,7 +84,7 @@ export default function ProductPage() {
         {/* Gallery — thumbnail strip exposes every angle (5–15 per spec) */}
         <section aria-label={`Photography of ${product.name}`}>
           <div className={`gallery-main ${zoom ? 'zoomed' : ''}`} onClick={() => setZoom((z) => !z)} title={zoom ? 'Click to zoom out' : 'Click to zoom into weave detail'}>
-            <img src={rugImage(product, angle, 1200, 900)} alt={`${product.name} — view ${angle + 1} of ${product.thumbnailCount}`} />
+            <img src={productImage(product, angle, 1200, 900)} alt={`${product.name} — view ${angle + 1} of ${product.thumbnailCount}`} />
           </div>
           <div className="gallery-thumbs" role="tablist" aria-label="Product views">
             {Array.from({ length: product.thumbnailCount }, (_, i) => (
@@ -92,7 +96,7 @@ export default function ProductPage() {
                 aria-label={`View ${i + 1}: ${['full rug', 'weave macro', 'corner detail', 'fringe finish', 'styled in room'][i % 5]}`}
                 onClick={() => { setAngle(i); setZoom(false); }}
               >
-                <img src={rugImage(product, i, 184, 184)} alt="" loading="lazy" />
+                <img src={productImage(product, i, 184, 184)} alt="" loading="lazy" />
               </button>
             ))}
           </div>
@@ -159,6 +163,13 @@ export default function ProductPage() {
             }}
           >
             {selected && selected.stock === 0 ? 'Notify me when rewoven' : 'Add to Cart'}
+          </button>
+          <button
+            className="btn btn-block"
+            style={{ marginTop: 12 }}
+            onClick={() => void toggle(product.slug).catch((reason) => notify(reason instanceof Error ? reason.message : 'Unable to update your wishlist.'))}
+          >
+            {has(product.slug) ? 'Remove from wishlist' : 'Save to wishlist'}
           </button>
           <p className="muted" style={{ fontSize: '0.75rem', marginTop: 14, letterSpacing: '0.06em' }}>
             Free insured shipping across India · 30-day returns · Each piece one-of-a-kind
