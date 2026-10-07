@@ -131,12 +131,13 @@ function countFor(
   dimension: 'techniques' | 'materials' | 'colors' | 'rooms' | 'styles',
   dict: readonly { slug: string; label: string }[],
   f: FacetState,
+  products: readonly Product[] = PRODUCTS,
 ): FacetOption[] {
   // Count products matching every OTHER active filter (dynamic facet counts),
   // then test membership in this dimension.
   const relaxed: FacetState = { ...f, [dimension]: [] };
   return dict.map((term) => {
-    const pool = PRODUCTS.filter((p) => {
+    const pool = products.filter((p) => {
       if (!matchesAll(p, relaxed)) return false;
       switch (dimension) {
         case 'techniques': return p.techniqueSlug === term.slug;
@@ -150,22 +151,22 @@ function countFor(
   });
 }
 
-export function computeFacets(f: FacetState): FacetGroup[] {
+export function computeFacets(f: FacetState, products: readonly Product[] = PRODUCTS): FacetGroup[] {
   const sizeOptions = SIZE_BUCKETS.map((b) => ({
     slug: b.key,
     label: b.label,
-    count: PRODUCTS.filter(
+    count: products.filter(
       (p) => matchesAll(p, f) && p.variants.some((v) => bucketOf(v) === b.key),
     ).length,
   }));
 
   return [
-    { id: 'techniques', label: 'Technique', options: countFor('techniques', TECHNIQUES, f) },
-    { id: 'materials', label: 'Material', options: countFor('materials', MATERIALS, f) },
-    { id: 'colors', label: 'Colour', options: countFor('colors', COLORS, f) },
+    { id: 'techniques', label: 'Technique', options: countFor('techniques', TECHNIQUES, f, products) },
+    { id: 'materials', label: 'Material', options: countFor('materials', MATERIALS, f, products) },
+    { id: 'colors', label: 'Colour', options: countFor('colors', COLORS, f, products) },
     { id: 'sizeBucket', label: 'Size', options: sizeOptions },
-    { id: 'rooms', label: 'Room', options: countFor('rooms', ROOMS, f) },
-    { id: 'styles', label: 'Style', options: countFor('styles', STYLES, f) },
+    { id: 'rooms', label: 'Room', options: countFor('rooms', ROOMS, f, products) },
+    { id: 'styles', label: 'Style', options: countFor('styles', STYLES, f, products) },
   ];
 }
 
@@ -174,8 +175,8 @@ export function computeFacets(f: FacetState): FacetGroup[] {
 const relevanceScore = (p: Product) =>
   p.rating * 2 + (p.bestSellerRank ? 1 / p.bestSellerRank : 0) + p.reviewsCount / 500;
 
-export function runSearch(f: FacetState): { results: Product[]; facets: FacetGroup[]; total: number } {
-  let results = PRODUCTS.filter((p) => matchesAll(p, f));
+export function runSearch(f: FacetState, products: readonly Product[] = PRODUCTS): { results: Product[]; facets: FacetGroup[]; total: number } {
+  let results = products.filter((p) => matchesAll(p, f));
   switch (f.sort) {
     case 'price-asc':
       results = [...results].sort((a, b) => priceRange(a).min - priceRange(b).min); break;
@@ -192,7 +193,7 @@ export function runSearch(f: FacetState): { results: Product[]; facets: FacetGro
     default:
       results = [...results].sort((a, b) => relevanceScore(b) - relevanceScore(a));
   }
-  return { results, facets: computeFacets(f), total: results.length };
+  return { results, facets: computeFacets(f, products), total: results.length };
 }
 
 // ── Applied-filter chips ------------------------------------------------------------
