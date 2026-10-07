@@ -29,6 +29,8 @@ export function Reveal({ children, delay = 0 }: { children: React.ReactNode; del
  * PLP card. Per discovery research: variants are combined into ONE list item
  * with colour swatches, and at least three additional thumbnails are exposed
  * on hover so shoppers can inspect weave/texture without clicking through.
+ * On touch devices (no hover) the alt-angle strip crossfades automatically —
+ * a mini-slideshow per card, standard in modern storefronts.
  */
 export function ProductCard({ product, eager = false }: { product: Product; eager?: boolean }) {
   const range = priceRange(product);
@@ -37,13 +39,23 @@ export function ProductCard({ product, eager = false }: { product: Product; eage
   const sameSizeColors = [...new Set(product.variants.map((v) => v.colorSlug))];
   // 3 extra angle thumbnails beyond the hero (spec minimum), capped by design count
   const altAngles = [1, 2, 3].filter((i) => i < product.thumbnailCount);
+  const touch = typeof window !== 'undefined' && window.matchMedia('(hover: none)').matches;
+  const reduced = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const [autoAngle, setAutoAngle] = useState(0);
+  useEffect(() => {
+    if (!touch || reduced || altAngles.length === 0) return;
+    const id = window.setInterval(() => setAutoAngle((a) => (a + 1) % altAngles.length), 3400);
+    return () => window.clearInterval(id);
+  }, [touch, reduced, altAngles.length]);
+  const displayAngle = touch && altAngles.length > 0 ? altAngles[autoAngle] : 0;
 
   return (
     <article className="card">
       <div className="card-media">
         <Link to={`/rugs/${product.slug}`} aria-label={`${product.name} — view details`}>
           <img
-            src={productImage(product, 0, 640, 480)}
+            className="card-hero-img"
+            src={productImage(product, displayAngle, 640, 480)}
             alt={`${product.name}, ${tech} ${mat.toLowerCase()} rug`}
             loading={eager ? 'eager' : 'lazy'}
             width={640}

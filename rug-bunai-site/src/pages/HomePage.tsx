@@ -2,17 +2,44 @@ import { Link } from 'react-router-dom';
 import { PRODUCTS, getProduct } from '../data/products';
 import { ROOMS, TECHNIQUES } from '../data/vocabularies';
 import { rugImage } from '../lib/rugArt';
-import { ProductCard, Reveal } from '../components/ProductCard';
+import { Reveal } from '../components/ProductCard';
+import Carousel from '../components/Carousel';
+import ProductRail from '../components/ProductRail';
 import { productsInCategory } from '../lib/search';
 
 /**
  * Homepage narrative follows the "archival luxury" directive: the hero tells
  * the story of Bhadohi's weaving tradition — the 1982 founding date appears
  * only as supporting evidence of longevity, never as the headline.
+ * The hero is now a full-bleed slideshow carousel; curated rows use
+ * swipeable snap-scroll rails so nothing squishes on phones & tablets.
  */
 export default function HomePage() {
-  const hero = getProduct('kashmiri-rose-medallion')!;
-  const bestSellers = PRODUCTS.filter((p) => p.bestSellerRank).slice(0, 3);
+  const bestSellers = PRODUCTS.filter((p) => p.bestSellerRank).slice(0, 6);
+  const newArrivals = [...PRODUCTS].sort((a, b) => a.addedDaysAgo - b.addedDaysAgo).slice(0, 6);
+
+  // Hero slideshow — three editorial slides, each a different craft story
+  const heroSlides = [
+    {
+      product: getProduct('kashmiri-rose-medallion')!,
+      eyebrow: 'The Weaving Coast of Uttar Pradesh',
+      title: <>Before it was a rug,<br />it was a language.</>,
+      sub: 'For five centuries, the looms of Bhadohi have translated sketch-books kept by weaver families into wool, silk and shadow.',
+    },
+    {
+      product: getProduct('mughal-garden-floral')!,
+      eyebrow: 'Hand-Knotted Archive',
+      title: <>One knot per pixel.<br />Eleven months per floor.</>,
+      sub: 'The asymmetric Persian knot lets a karigar draw the curl of a vine — the reason our floral fields breathe.',
+    },
+    {
+      product: getProduct('desert-line-geometric')!,
+      eyebrow: 'Warm Minimalism',
+      title: <>Texture holds light<br />the way colour cannot.</>,
+      sub: 'In a pared-back room, a hand-loomed neutral anchors everything — start from your floor plan.',
+    },
+  ];
+
   const techniqueTiles = [
     { tech: TECHNIQUES[0], path: 'rugs/hand-knotted/wool', blurb: 'A knot for every pixel' },
     { tech: TECHNIQUES[1], path: 'rugs/hand-tufted/wool', blurb: 'Carved relief, punched by hand' },
@@ -26,35 +53,51 @@ export default function HomePage() {
 
   return (
     <>
-      {/* Hero */}
+      {/* Hero slideshow */}
       <section className="hero">
-        <div className="hero-art" aria-hidden="true">
-          <img src={rugImage(hero, 4, 1600, 900)} alt="" />
-        </div>
-        <div className="hero-inner">
-          <p className="eyebrow">The Weaving Coast of Uttar Pradesh</p>
-          <h1 className="display">Before it was a rug,<br />it was a language.</h1>
-          <p className="hero-sub">
-            For five centuries, the looms of Bhadohi have translated sketch-books kept
-            by weaver families into wool, silk and shadow. Rug Bunai exists to keep that
-            grammar alive — knot by knot, one floor at a time.
-          </p>
-          <div className="hero-cta">
-            <Link to="/rugs" className="btn btn-light">Explore the Archive</Link>
-            <Link to="/story" className="btn btn-light" style={{ borderColor: 'rgba(247,243,236,.4)' }}>The Craft Story</Link>
-          </div>
-        </div>
+        <Carousel label="Featured collections" autoMs={6200} className="hero-carousel"
+          slides={heroSlides.map((s, i) => (
+            <div className="hero-slide" key={i}>
+              <div className="hero-art" aria-hidden={i !== 0}>
+                <img src={rugImage(s.product, 4, 1600, 900)} alt="" loading={i === 0 ? 'eager' : 'lazy'} />
+              </div>
+              <div className="hero-inner">
+                <p className="eyebrow">{s.eyebrow}</p>
+                <h2 className="display slide-up">{s.title}</h2>
+                <p className="hero-sub">{s.sub}</p>
+                <div className="hero-cta">
+                  <Link to="/rugs" className="btn btn-light">Explore the Archive</Link>
+                  <Link to="/story" className="btn btn-light" style={{ borderColor: 'rgba(247,243,236,.4)' }}>The Craft Story</Link>
+                </div>
+              </div>
+            </div>
+          ))}
+        />
       </section>
 
       {/* Stats / trust band */}
       <div className="wrap">
         <div className="stats-row">
-          <div className="stat"><b>1982</b><span>Kilns lit since — four decades unbroken</span></div>
-          <div className="stat"><b>169</b><span>Knots per square inch, our finest archive piece</span></div>
-          <div className="stat"><b>11</b><span>Months on the loom for a single masterpiece</span></div>
-          <div className="stat"><b>100%</b><span>Hand-finished, natural fibres, no synthetic backing</span></div>
+          <Reveal><div className="stat"><b>1982</b><span>Kilns lit since — four decades unbroken</span></div></Reveal>
+          <Reveal delay={80}><div className="stat"><b>169</b><span>Knots per square inch, our finest archive piece</span></div></Reveal>
+          <Reveal delay={160}><div className="stat"><b>11</b><span>Months on the loom for a single masterpiece</span></div></Reveal>
+          <Reveal delay={240}><div className="stat"><b>100%</b><span>Hand-finished, natural fibres, no synthetic backing</span></div></Reveal>
         </div>
       </div>
+
+      {/* New arrivals rail (swipeable catalogue) */}
+      <section className="wrap section" style={{ paddingTop: 34, paddingBottom: 34 }}>
+        <Reveal>
+          <div className="axis-head">
+            <div>
+              <p className="eyebrow">Fresh off the Loom</p>
+              <h2 className="headline">New this season</h2>
+            </div>
+            <Link to="/rugs?sort=newest" className="clear-all">View all →</Link>
+          </div>
+        </Reveal>
+        <ProductRail products={newArrivals} />
+      </section>
 
       {/* Axis 1: Technique & Material */}
       <section className="wrap section" style={{ paddingTop: 24 }}>
@@ -109,7 +152,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Best sellers */}
+      {/* Best sellers rail */}
       <section className="wrap section" style={{ paddingTop: 0 }}>
         <Reveal>
           <div className="axis-head">
@@ -117,15 +160,10 @@ export default function HomePage() {
               <p className="eyebrow">Most Coveted</p>
               <h2 className="headline">Chosen again and again</h2>
             </div>
+            <Link to="/rugs?sort=best-selling" className="clear-all">View all →</Link>
           </div>
         </Reveal>
-        <div className="related-grid">
-          {bestSellers.map((p, i) => (
-            <Reveal key={p.id} delay={i * 90}>
-              <ProductCard product={p} />
-            </Reveal>
-          ))}
-        </div>
+        <ProductRail products={bestSellers} />
       </section>
 
       {/* Axis 2: Room & Use Case */}
