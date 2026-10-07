@@ -63,7 +63,7 @@ function managedProduct(row: ManagedRow): CatalogProduct {
     variants: saved.variants?.length ? saved.variants : [{
       id: 'variant-' + id,
       sku: 'RB-' + id.slice(0, 8).toUpperCase(),
-      sizeLabel: '230 × 160 cm (7\\'6" × 5\\'3")',
+      sizeLabel: '230 × 160 cm (7\'6" × 5\'3")',
       width: { cm: 160, in: 63 },
       length: { cm: 230, in: 90.5 },
       colorSlug: 'ivory',
@@ -111,7 +111,7 @@ function newProductPayload(input: NewProduct): Product {
     variants: [{
       id: 'variant-' + id,
       sku: 'RB-' + id.slice(0, 8).toUpperCase(),
-      sizeLabel: '230 × 160 cm (7\\'6" × 5\\'3")',
+      sizeLabel: '230 × 160 cm (7\'6" × 5\'3")',
       width: { cm: 160, in: 63 },
       length: { cm: 230, in: 90.5 },
       colorSlug: 'ivory',
