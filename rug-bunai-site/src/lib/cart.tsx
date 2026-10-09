@@ -3,6 +3,7 @@ import type { Product, Variant } from '../data/products';
 import { useAuth } from './auth';
 import { useCatalog } from './catalog';
 import { supabase } from './supabase';
+import { lineSqft, stainCoatCost } from './sizes';
 
 export interface CartLine {
   readonly variantId: string;
@@ -12,6 +13,7 @@ export interface CartLine {
 export type ResolvedCartLine = { product: Product; variant: Variant; qty: number };
 
 const KEY = 'rugbunai-cart-v2';
+const COAT_KEY = 'rugbunai-stain-coat';
 
 type CartCtx = {
   lines: CartLine[];
@@ -22,6 +24,12 @@ type CartCtx = {
   clear: () => void;
   count: number;
   subtotalInr: number;
+  /** Stain-resistant coating add-on (₹90/sq ft), chosen at the end of checkout. */
+  stainCoat: boolean;
+  setStainCoat: (on: boolean) => void;
+  totalSqft: number;
+  stainCoatInr: number;
+  totalInr: number;
 };
 
 const Ctx = createContext<CartCtx | null>(null);
@@ -89,6 +97,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
     return [];
   }), [lines, products]);
 
+  const [stainCoat, setStainCoatState] = useState<boolean>(
+    () => localStorage.getItem(COAT_KEY) === '1',
+  );
+  const setStainCoat = (on: boolean) => {
+    setStainCoatState(on);
+    localStorage.setItem(COAT_KEY, on ? '1' : '0');
+  };
+  const totalSqft = items.reduce((total, line) => total + lineSqft(line.variant) * line.qty, 0);
+  const subtotalInr = items.reduce((total, line) => total + line.variant.priceInr * line.qty, 0);
+  const stainCoatInr = stainCoat ? stainCoatCost(totalSqft) : 0;
+
   const value = useMemo<CartCtx>(() => ({
     lines,
     items,
@@ -112,8 +131,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
       setLines([]);
     },
     count: lines.reduce((total, line) => total + line.qty, 0),
-    subtotalInr: items.reduce((total, line) => total + line.variant.priceInr * line.qty, 0),
-  }), [items, lines]);
+    subtotalInr,
+    stainCoat,
+    setStainCoat,
+    totalSqft,
+    stainCoatInr,
+    totalInr: subtotalInr + stainCoatInr,
+  }), [items, lines, subtotalInr, stainCoat, stainCoatInr, totalSqft]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

@@ -11,7 +11,7 @@ import ContactPage, { NotFound, PoliciesPage } from './pages/InfoPages';
 import { CartPage, CheckoutPage } from './pages/CartPages';
 import { LoginPage } from './pages/AuthPages';
 import WishlistPage from './pages/WishlistPage';
-import StudioPage from './pages/StudioPage';
+import AdminPage from './pages/AdminPage';
 import { AuthProvider } from './lib/auth';
 import { CatalogProvider } from './lib/catalog';
 import { CartProvider } from './lib/cart';
@@ -36,7 +36,7 @@ const router = createBrowserRouter([
       { path: 'wishlist', element: <WishlistPage /> },
       { path: 'login', element: <LoginPage /> },
       { path: 'admin/login', element: <LoginPage adminOnly /> },
-      { path: 'studio', element: <StudioPage /> },
+      { path: 'studio', element: <AdminPage /> },
       { path: 'policies/:slug', element: <PoliciesPage /> },
       { path: 'contact', element: <ContactPage /> },
       { path: '*', element: <NotFound /> },

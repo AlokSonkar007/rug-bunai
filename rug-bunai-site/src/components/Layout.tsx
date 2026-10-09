@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useCart } from '../lib/cart';
 import { useAuth } from '../lib/auth';
-import { MATERIALS, ROOMS, TECHNIQUES } from '../data/vocabularies';
+import { MATERIALS, ROOMS, TECHNIQUES, CARPET_CATEGORIES, carpetCategoryPath } from '../data/vocabularies';
 import { rugImage } from '../lib/rugArt';
 import { getProduct } from '../data/products';
+import { whatsappLink } from '../lib/siteContent';
 
 /** Desktop "Collections" mega-menu content — shared by hover panel & mobile drawer. */
 function MegaMenu({ onNavigate }: { onNavigate?: () => void }) {
@@ -37,6 +38,16 @@ function MegaMenu({ onNavigate }: { onNavigate?: () => void }) {
           {ROOMS.map((room) => (
             <li key={room.slug}>
               <Link to={`/rugs?room=${room.slug}`} onClick={onNavigate}>{room.label}</Link>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div className="mega-col">
+        <p className="eyebrow">Carpet Categories</p>
+        <ul>
+          {CARPET_CATEGORIES.map((category) => (
+            <li key={category.slug}>
+              <Link to={carpetCategoryPath(category.slug)} onClick={onNavigate}>{category.label}</Link>
             </li>
           ))}
         </ul>
@@ -198,7 +209,7 @@ export default function Layout() {
               {user ? (
                 <>
                   <Link to="/wishlist" className="clear-all" style={{ fontSize: '0.72rem' }}>Wishlist</Link>
-                  {profile?.role === 'admin' && <Link to="/admin" className="clear-all" style={{ fontSize: '0.72rem' }}>Studio</Link>}
+                  {profile?.role === 'admin' && <Link to="/studio" className="clear-all" style={{ fontSize: '0.72rem' }}>Studio</Link>}
                   <button className="clear-all" style={{ fontSize: '0.72rem' }} onClick={() => void signOut()}>Sign out</button>
                 </>
               ) : (
@@ -247,7 +258,7 @@ export default function Layout() {
               {user ? (
                 <>
                   <Link to="/wishlist">Wishlist</Link>
-                  {profile?.role === 'admin' && <Link to="/admin">Studio</Link>}
+                  {profile?.role === 'admin' && <Link to="/studio">Studio</Link>}
                   <button className="clear-all" onClick={() => void signOut()}>Sign out</button>
                 </>
               ) : (
@@ -264,7 +275,26 @@ export default function Layout() {
       </main>
 
       <SiteFooter />
+      <WhatsAppFab />
     </div>
+  );
+}
+
+/** Floating WhatsApp contact bubble — bottom-right on every page. */
+function WhatsAppFab() {
+  return (
+    <a
+      className="whatsapp-fab"
+      href={whatsappLink('Hello Rug Bunai! I have a question about your rugs.')}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label="Chat with us on WhatsApp"
+    >
+      <svg viewBox="0 0 32 32" width="26" height="26" fill="currentColor" aria-hidden="true">
+        <path d="M16 2.9c-7.2 0-13.1 5.9-13.1 13.1 0 2.3.6 4.5 1.7 6.5L2.9 29.1l7-1.8a13.1 13.1 0 0 0 6.1 1.5h0c7.2 0 13.1-5.9 13.1-13.1S23.2 2.9 16 2.9zm0 23.9h0a10.8 10.8 0 0 1-5.5-1.5l-.4-.2-4.1 1.1 1.1-4-.3-.4A10.8 10.8 0 1 1 16 26.8zm5.9-8c-.3-.2-1.9-1-2.2-1.1-.3-.1-.5-.2-.7.2-.2.3-.8 1.1-1 1.3-.2.2-.4.2-.7.1-.3-.2-1.3-.5-2.4-1.5-.9-.8-1.5-1.8-1.7-2.1-.2-.3 0-.5.1-.6l.5-.6c.2-.2.2-.3.3-.5.1-.2.1-.4 0-.6-.1-.2-.7-1.8-1-2.4-.3-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.5s1.1 2.9 1.2 3.1c.2.2 2.2 3.3 5.3 4.6.7.3 1.3.5 1.8.6.7.2 1.4.2 1.9.1.6-.1 1.9-.8 2.1-1.5.3-.8.3-1.4.2-1.5-.1-.2-.3-.2-.6-.4z" />
+      </svg>
+      <span className="whatsapp-fab-label">Chat with us on WhatsApp</span>
+    </a>
   );
 }
 

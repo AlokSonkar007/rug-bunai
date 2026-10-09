@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { formatINR } from '../data/products';
 import { useCart } from '../lib/cart';
 import { productImage } from '../lib/images';
+import { stainCoatCost } from '../lib/sizes';
 
 export function CartPage() {
   const cart = useCart();
@@ -164,7 +165,20 @@ export function CheckoutPage() {
           <p className="muted" style={{ fontSize: '0.75rem', marginBottom: 20 }}>
             Payments process through Shopify Pay in production; this demo validates locally and never stores card data.
           </p>
-          <button className="btn btn-solid btn-block" type="submit">Place order — {formatINR(cart.subtotalInr)}</button>
+
+          <hr className="rule" style={{ margin: '26px 0' }} />
+          <h2 className="subhead" style={{ marginBottom: 12 }}>Finishing add-on</h2>
+          <label htmlFor="ck-coat" className="summary-card" style={{ display: 'flex', gap: 14, alignItems: 'flex-start', cursor: 'pointer', padding: 16, marginBottom: 20, border: cart.stainCoat ? '1px solid currentColor' : undefined }}>
+            <input id="ck-coat" type="checkbox" checked={cart.stainCoat} onChange={(event) => cart.setStainCoat(event.target.checked)} style={{ marginTop: 4 }} />
+            <span>
+              <strong>Stain-resistant coating</strong>
+              <span className="muted" style={{ display: 'block', fontSize: '0.82rem', marginTop: 4 }}>
+                Protects your rug from spills and daily wear. ₹90 per square foot — for this order ({Math.round(cart.totalSqft)} sq ft) that adds {formatINR(stainCoatCost(cart.totalSqft))}.
+              </span>
+            </span>
+          </label>
+
+          <button className="btn btn-solid btn-block" type="submit">Place order — {formatINR(cart.totalInr)}</button>
         </form>
 
         <aside className="summary-card">
@@ -180,7 +194,10 @@ export function CheckoutPage() {
             </div>
           ))}
           <div className="summary-row" style={{ marginTop: 10 }}><span>Shipping</span><span>Included</span></div>
-          <div className="summary-row summary-total"><span>Total</span><span>{formatINR(cart.subtotalInr)}</span></div>
+          {cart.stainCoat && (
+            <div className="summary-row"><span>Stain-resistant coating</span><span>{formatINR(cart.stainCoatInr)}</span></div>
+          )}
+          <div className="summary-row summary-total"><span>Total</span><span>{formatINR(cart.totalInr)}</span></div>
         </aside>
       </div>
     </div>
