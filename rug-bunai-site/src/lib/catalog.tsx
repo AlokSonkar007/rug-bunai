@@ -1,5 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { PRODUCTS, type Product } from '../data/products';
+import { makeVariant, PRODUCTS, type Product } from '../data/products';
+import { carpetCategoryPath, findCarpetCategory, MATERIALS, STYLES, TECHNIQUES } from '../data/vocabularies';
+import { SIZE_OPTIONS, sizeLabelFor } from './sizes';
+import { useSiteContent } from './siteContent';
 import { useAuth } from './auth';
 import { supabase } from './supabase';
 
@@ -12,12 +15,22 @@ export type CatalogProduct = Product & {
 type ProductOverride = { product_slug: string; image_url: string | null; is_hidden: boolean };
 type ManagedRow = { id: string; slug: string; product: unknown; image_url: string | null };
 
-type NewProduct = {
+/** A single size × colour offer chosen in the Studio. */
+export type OfferInput = {
+  sizeKey: string; widthFt: number; lengthFt: number; colorSlug: string; priceInr: number; stock: number;
+};
+
+export type NewProductInput = {
   name: string;
   slug: string;
   description: string;
-  priceInr: number;
   imageUrl?: string | null;
+  techniqueSlug: string;
+  materialSlug: string;
+  roomSlugs: string[];
+  styleSlugs: string[];
+  categorySlugs: string[];
+  offers: OfferInput[];
 };
 
 type CatalogContextValue = {
@@ -25,12 +38,31 @@ type CatalogContextValue = {
   loading: boolean;
   refresh: () => Promise<void>;
   uploadProductPhoto: (file: File) => Promise<string>;
-  createManagedProduct: (input: NewProduct) => Promise<void>;
+  createManagedProduct: (input: NewProductInput) => Promise<void>;
   removeProduct: (product: CatalogProduct) => Promise<void>;
   changeProductPhoto: (product: CatalogProduct, file: File) => Promise<void>;
 };
 
 const CatalogContext = createContext<CatalogContextValue | null>(null);
+
+const findStyle = (slugValue: string) => STYLES.some((s) => s.slug === slugValue);
+
+function classificationFor(techniqueSlug: string, materialSlug: string): string {
+  const tech = TECHNIQUES.find((x) => x.slug === techniqueSlug)?.slug ?? 'hand-knotted';
+  const mat = MATERIALS.find((x) => x.slug === materialSlug);
+  const matWord = mat && mat.slug !== 'wool' ? '-' + mat.slug : '-wool';
+  return `${tech}${matWord}-rug`;
+}
+
+function baseCategoryPaths(input: Pick<NewProductInput, 'techniqueSlug' | 'materialSlug' | 'roomSlugs' | 'styleSlugs' | 'categorySlugs'>): string[] {
+  const paths = [
+    `rugs/${input.techniqueSlug}/${input.materialSlug}`,
+    ...input.roomSlugs.map((r) => `rugs/${r}`),
+    ...input.styleSlugs.filter(findStyle).map((s) => `rugs/${s}`),
+    ...input.categorySlugs.filter(findCarpetCategory).map(carpetCategoryPath),
+  ];
+  return [...new Set(paths)];
+}
 
 function managedProduct(row: ManagedRow): CatalogProduct {
   const saved = (row.product && typeof row.product === 'object' ? row.product : {}) as Partial<Product>;
@@ -63,9 +95,9 @@ function managedProduct(row: ManagedRow): CatalogProduct {
     variants: saved.variants?.length ? saved.variants : [{
       id: 'variant-' + id,
       sku: 'RB-' + id.slice(0, 8).toUpperCase(),
-      sizeLabel: '230 × 160 cm (7\\'6" × 5\\'3")',
-      width: { cm: 160, in: 63 },
-      length: { cm: 230, in: 90.5 },
+      sizeLabel: "6' × 9'",
+      width: { cm: 183, in: 72 },
+      length: { cm: 274, in: 108 },
       colorSlug: 'ivory',
       priceInr: price,
       stock: 1,
@@ -82,8 +114,15 @@ function managedProduct(row: ManagedRow): CatalogProduct {
   };
 }
 
-function newProductPayload(input: NewProduct): Product {
+function newProductPayload(input: NewProductInput): Product {
   const id = crypto.randomUUID();
+  const prefix = input.slug.split('-').map((w) => w[0]?.toUpperCase() ?? '').join('').slice(0, 2) || 'RB';
+  const colors = [...new Set(input.offers.map((o) => o.colorSlug))];
+  const variants = input.offers.map((offer, i) => {
+    const canonical = SIZE_OPTIONS.find((s) => !s.custom && s.key === offer.sizeKey);
+    const label = canonical ? canonical.label : sizeLabelFor(offer.widthFt, offer.lengthFt);
+    return makeVariant(`variant-${id}-${i}`, prefix, label, offer.widthFt, offer.lengthFt, offer.colorSlug, offer.priceInr, offer.stock);
+  });
   return {
     id,
     slug: input.slug,
@@ -91,13 +130,13 @@ function newProductPayload(input: NewProduct): Product {
     tagline: 'A new hand-finished Rug Bunai piece',
     description: input.description,
     craftStory: 'Each Rug Bunai piece carries the marks of the hands and loom that made it.',
-    colorSlugs: ['ivory'],
-    materialSlug: 'wool',
-    techniqueSlug: 'hand-knotted',
-    styleSlugs: ['modern'],
-    roomSlugs: ['living-room'],
-    classificationSlug: 'hand-knotted-wool-rug',
-    categoryPaths: ['rugs/hand-knotted/wool', 'rugs/living-room', 'rugs/modern'],
+    colorSlugs: colors.length ? colors : ['ivory'],
+    materialSlug: input.materialSlug,
+    techniqueSlug: input.techniqueSlug,
+    styleSlugs: input.styleSlugs.length ? input.styleSlugs : ['modern'],
+    roomSlugs: input.roomSlugs.length ? input.roomSlugs : ['living-room'],
+    classificationSlug: classificationFor(input.techniqueSlug, input.materialSlug),
+    categoryPaths: baseCategoryPaths(input),
     specs: {
       pileHeightMm: 10,
       weightKgPerSqm: 3,
@@ -108,16 +147,7 @@ function newProductPayload(input: NewProduct): Product {
       warpMaterial: 'Cotton',
       weaveMonthsApprox: 4,
     },
-    variants: [{
-      id: 'variant-' + id,
-      sku: 'RB-' + id.slice(0, 8).toUpperCase(),
-      sizeLabel: '230 × 160 cm (7\\'6" × 5\\'3")',
-      width: { cm: 160, in: 63 },
-      length: { cm: 230, in: 90.5 },
-      colorSlug: 'ivory',
-      priceInr: input.priceInr,
-      stock: 1,
-    }],
+    variants: variants.length ? variants : [makeVariant('variant-' + id, prefix, "6' × 9'", 6, 9, 'ivory', 0, 1)],
     rating: 5,
     reviewsCount: 0,
     addedDaysAgo: 0,
@@ -129,12 +159,13 @@ function newProductPayload(input: NewProduct): Product {
 
 export function CatalogProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  const [products, setProducts] = useState<CatalogProduct[]>([...PRODUCTS]);
+  const { productOverrides, saveProductHidden, saveProductImage } = useSiteContent();
+  const [remoteProducts, setRemoteProducts] = useState<CatalogProduct[]>([...PRODUCTS]);
   const [loading, setLoading] = useState(Boolean(supabase));
 
   const refresh = useCallback(async () => {
     if (!supabase) {
-      setProducts([...PRODUCTS]);
+      setRemoteProducts([...PRODUCTS]);
       setLoading(false);
       return;
     }
@@ -152,13 +183,27 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       .filter((product) => !overrides.get(product.slug)?.is_hidden)
       .map((product) => ({ ...product, imageUrl: overrides.get(product.slug)?.image_url ?? null }));
     const managed = ((managedResult.data ?? []) as ManagedRow[]).map(managedProduct);
-    setProducts([...base, ...managed]);
+    setRemoteProducts([...base, ...managed]);
     setLoading(false);
   }, []);
 
   useEffect(() => {
     void refresh().catch(() => setLoading(false));
   }, [refresh]);
+
+  // Apply Studio text/image/hidden overrides on top of the DB-hydrated list.
+  const products = useMemo<CatalogProduct[]>(() => {
+    const merged = remoteProducts.map((product) => {
+      const ov = productOverrides[product.slug];
+      if (!ov) return product;
+      return {
+        ...product,
+        ...(ov.text ?? {}),
+        imageUrl: ov.imageUrl !== undefined ? ov.imageUrl : product.imageUrl,
+      };
+    });
+    return merged.filter((product) => !productOverrides[product.slug]?.hidden);
+  }, [remoteProducts, productOverrides]);
 
   const uploadProductPhoto = useCallback(async (file: File) => {
     if (!supabase || !user) throw new Error('Sign in as an admin before uploading a photo.');
@@ -175,11 +220,12 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     return supabase.storage.from('product-images').getPublicUrl(path).data.publicUrl;
   }, [user]);
 
-  const createManagedProduct = useCallback(async (input: NewProduct) => {
-    if (!supabase || !user) throw new Error('Sign in as an admin before adding a product.');
+  const createManagedProduct = useCallback(async (input: NewProductInput) => {
+    if (!supabase || !user) throw new Error('Sign in as an admin before adding a product. Configure Supabase in .env to publish new designs.');
+    const payload = newProductPayload(input);
     const { error } = await supabase.from('managed_products').insert({
       slug: input.slug,
-      product: newProductPayload(input),
+      product: payload,
       image_url: input.imageUrl ?? null,
       created_by: user.id,
     });
@@ -188,31 +234,41 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
   }, [refresh, user]);
 
   const removeProduct = useCallback(async (product: CatalogProduct) => {
-    if (!supabase) throw new Error('Supabase is not configured.');
-    const result = product.isManaged
-      ? await supabase.from('managed_products').delete().eq('id', product.managedId!)
-      : await supabase.from('product_overrides').upsert({
-          product_slug: product.slug,
-          is_hidden: true,
-          image_url: product.imageUrl ?? null,
-        });
-    if (result.error) throw result.error;
-    await refresh();
-  }, [refresh]);
+    if (product.isManaged && supabase) {
+      const result = await supabase.from('managed_products').delete().eq('id', product.managedId!);
+      if (result.error) throw result.error;
+      await refresh();
+      return;
+    }
+    if (supabase) {
+      const result = await supabase.from('product_overrides').upsert({
+        product_slug: product.slug,
+        is_hidden: true,
+        image_url: product.imageUrl ?? null,
+      });
+      if (result.error) throw result.error;
+      await refresh();
+    } else {
+      await saveProductHidden(product.slug, true);
+    }
+  }, [refresh, saveProductHidden]);
 
   const changeProductPhoto = useCallback(async (product: CatalogProduct, file: File) => {
-    if (!supabase) throw new Error('Supabase is not configured.');
     const imageUrl = await uploadProductPhoto(file);
-    const result = product.isManaged
-      ? await supabase.from('managed_products').update({ image_url: imageUrl }).eq('id', product.managedId!)
-      : await supabase.from('product_overrides').upsert({
-          product_slug: product.slug,
-          image_url: imageUrl,
-          is_hidden: false,
-        });
-    if (result.error) throw result.error;
-    await refresh();
-  }, [refresh, uploadProductPhoto]);
+    if (supabase) {
+      const result = product.isManaged
+        ? await supabase.from('managed_products').update({ image_url: imageUrl }).eq('id', product.managedId!)
+        : await supabase.from('product_overrides').upsert({
+            product_slug: product.slug,
+            image_url: imageUrl,
+            is_hidden: false,
+          });
+      if (result.error) throw result.error;
+      await refresh();
+    } else {
+      await saveProductImage(product.slug, imageUrl);
+    }
+  }, [refresh, uploadProductPhoto, saveProductImage]);
 
   const value = useMemo(() => ({
     products, loading, refresh, uploadProductPhoto, createManagedProduct, removeProduct, changeProductPhoto,

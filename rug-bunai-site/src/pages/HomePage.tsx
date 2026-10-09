@@ -1,81 +1,124 @@
 import { Link } from 'react-router-dom';
-import { PRODUCTS, getProduct } from '../data/products';
-import { ROOMS, TECHNIQUES } from '../data/vocabularies';
+import { getProduct } from '../data/products';
+import { COLORS, colorHex, ROOMS } from '../data/vocabularies';
+import { productImage } from '../lib/images';
 import { rugImage } from '../lib/rugArt';
-import { ProductCard, Reveal } from '../components/ProductCard';
+import { Reveal } from '../components/ProductCard';
+import Carousel from '../components/Carousel';
+import ProductRail from '../components/ProductRail';
 import { productsInCategory } from '../lib/search';
+import { useCatalog } from '../lib/catalog';
+import { useSiteContent, type TileContent, type SplitBlockContent } from '../lib/siteContent';
+
+/** Seed product used for generated tile art when the admin hasn't uploaded an image. */
+function seedProduct(slug: string | undefined, fallbackIndex: number, list: readonly { slug: string; name: string }[]) {
+  const bySlug = slug ? getProduct(slug) : undefined;
+  return bySlug ?? list[fallbackIndex % list.length];
+}
+
+/** Editable tile with optional admin-uploaded image. */
+function EditableTile({ item, sample, i, alt }: { item: TileContent; sample: { slug: string; name: string }; i: number; alt: string }) {
+  return (
+    <Link to={item.to} className="tile">
+      <img
+        src={item.imageUrl ?? rugImage(sample as never, 0, 480, 640)}
+        alt={alt}
+        loading={i === 0 ? 'eager' : 'lazy'}
+      />
+      <figcaption><em>{item.title}</em>{item.blurb}</figcaption>
+    </Link>
+  );
+}
 
 /**
- * Homepage narrative follows the "archival luxury" directive: the hero tells
- * the story of Bhadohi's weaving tradition — the 1982 founding date appears
- * only as supporting evidence of longevity, never as the headline.
+ * Homepage narrative follows the "archival luxury" directive: hero, rails,
+ * tiles and editorial splits are fully editable from the Studio (text + image).
+ * Swipeable snap-scroll rails keep phones/tablets from squishing content.
  */
 export default function HomePage() {
-  const hero = getProduct('kashmiri-rose-medallion')!;
-  const bestSellers = PRODUCTS.filter((p) => p.bestSellerRank).slice(0, 3);
-  const techniqueTiles = [
-    { tech: TECHNIQUES[0], path: 'rugs/hand-knotted/wool', blurb: 'A knot for every pixel' },
-    { tech: TECHNIQUES[1], path: 'rugs/hand-tufted/wool', blurb: 'Carved relief, punched by hand' },
-    { tech: TECHNIQUES[2], path: 'rugs/flat-woven/cotton', blurb: 'Pattern as structure' },
-    { tech: TECHNIQUES[3], path: 'rugs/loom-woven/bamboo-silk', blurb: 'Sheen woven lengthwise' },
-  ];
+  const { products } = useCatalog();
+  const { content } = useSiteContent();
+
+  const bestSellers = products.filter((p) => p.bestSellerRank).slice(0, 6);
+  const newArrivals = [...products].sort((a, b) => a.addedDaysAgo - b.addedDaysAgo).slice(0, 6);
+
   const roomTiles = ROOMS.map((room, i) => ({
     room,
-    sample: productsInCategory(`rugs/${room.slug}`)[0] ?? PRODUCTS[i % PRODUCTS.length],
+    sample: productsInCategory(`rugs/${room.slug}`)[0] ?? products[i % products.length],
   }));
+
+  const craftImg = (s: SplitBlockContent, angle: number) =>
+    s.imageUrl ?? rugImage(seedProduct(s.productSlug, 1, products) as never, angle, 900, 680);
 
   return (
     <>
-      {/* Hero */}
+      {/* Hero slideshow — every slide editable in the Studio */}
       <section className="hero">
-        <div className="hero-art" aria-hidden="true">
-          <img src={rugImage(hero, 4, 1600, 900)} alt="" />
-        </div>
-        <div className="hero-inner">
-          <p className="eyebrow">The Weaving Coast of Uttar Pradesh</p>
-          <h1 className="display">Before it was a rug,<br />it was a language.</h1>
-          <p className="hero-sub">
-            For five centuries, the looms of Bhadohi have translated sketch-books kept
-            by weaver families into wool, silk and shadow. Rug Bunai exists to keep that
-            grammar alive — knot by knot, one floor at a time.
-          </p>
-          <div className="hero-cta">
-            <Link to="/rugs" className="btn btn-light">Explore the Archive</Link>
-            <Link to="/story" className="btn btn-light" style={{ borderColor: 'rgba(247,243,236,.4)' }}>The Craft Story</Link>
-          </div>
-        </div>
+        <Carousel label="Featured collections" autoMs={6200} className="hero-carousel"
+          slides={content.heroSlides.map((s, i) => (
+            <div className="hero-slide" key={i}>
+              <div className="hero-art" aria-hidden={i !== 0}>
+                <img
+                  src={s.imageUrl ?? rugImage(seedProduct(s.productSlug, i, products) as never, 4, 1600, 900)}
+                  alt="" loading={i === 0 ? 'eager' : 'lazy'}
+                />
+              </div>
+              <div className="hero-inner">
+                <p className="eyebrow">{s.eyebrow}</p>
+                <h2 className="display slide-up">{s.title1}<br />{s.title2}</h2>
+                <p className="hero-sub">{s.sub}</p>
+                <div className="hero-cta">
+                  <Link to={s.ctaTo} className="btn btn-light">{s.ctaLabel}</Link>
+                  {s.altCtaLabel && (
+                    <Link to={s.altCtaTo} className="btn btn-light" style={{ borderColor: 'rgba(247,243,236,.4)' }}>{s.altCtaLabel}</Link>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        />
       </section>
 
       {/* Stats / trust band */}
       <div className="wrap">
         <div className="stats-row">
-          <div className="stat"><b>1982</b><span>Kilns lit since — four decades unbroken</span></div>
-          <div className="stat"><b>169</b><span>Knots per square inch, our finest archive piece</span></div>
-          <div className="stat"><b>11</b><span>Months on the loom for a single masterpiece</span></div>
-          <div className="stat"><b>100%</b><span>Hand-finished, natural fibres, no synthetic backing</span></div>
+          {content.stats.map((st, i) => (
+            <Reveal key={i} delay={i * 80}><div className="stat"><b>{st.value}</b><span>{st.label}</span></div></Reveal>
+          ))}
         </div>
       </div>
+
+      {/* New arrivals rail (swipeable catalogue) */}
+      <section className="wrap section" style={{ paddingTop: 34, paddingBottom: 34 }}>
+        <Reveal>
+          <div className="axis-head">
+            <div>
+              <p className="eyebrow">{content.newArrivalsRail.eyebrow}</p>
+              <h2 className="headline">{content.newArrivalsRail.title}</h2>
+            </div>
+            <Link to={content.newArrivalsRail.linkTo} className="clear-all">{content.newArrivalsRail.linkLabel}</Link>
+          </div>
+        </Reveal>
+        <ProductRail products={newArrivals} />
+      </section>
 
       {/* Axis 1: Technique & Material */}
       <section className="wrap section" style={{ paddingTop: 24 }}>
         <Reveal>
           <div className="axis-head">
             <div>
-              <p className="eyebrow">By Technique &amp; Material</p>
-              <h2 className="headline">Choose how it was made</h2>
+              <p className="eyebrow">{content.techniqueHeading.eyebrow}</p>
+              <h2 className="headline">{content.techniqueHeading.title}</h2>
             </div>
             <Link to="/rugs" className="clear-all">View all designs →</Link>
           </div>
         </Reveal>
         <div className="tiles">
-          {techniqueTiles.map(({ tech, path, blurb }, i) => {
-            const sample = productsInCategory(path)[0];
+          {content.techniqueTiles.map((tile, i) => {
+            const sample = productsInCategory(tile.to.replace(/^\/c\//, ''))[0] ?? products[0];
             return (
-              <Reveal key={tech.slug} delay={i * 80}>
-                <Link to={`/c/${path}`} className="tile">
-                  <img src={rugImage(sample ?? PRODUCTS[0], 0, 480, 640)} alt={`${tech.label} rug detail`} loading="lazy" />
-                  <figcaption><em>{tech.label}</em>{blurb}</figcaption>
-                </Link>
+              <Reveal key={i} delay={i * 80}>
+                <EditableTile item={tile} sample={sample ?? products[0]} i={i} alt={`${tile.title} rug detail`} />
               </Reveal>
             );
           })}
@@ -86,46 +129,35 @@ export default function HomePage() {
       <section className="wrap section">
         <div className="split">
           <div className="media">
-            <img src={rugImage(getProduct('mughal-garden-floral')!, 1, 900, 680)} alt="Macro view of a hand-knotted wool pile showing individual knots" loading="lazy" />
+            <img src={craftImg(content.craftSplit, 1)} alt="Macro view of a hand-knotted wool pile showing individual knots" loading="lazy" />
           </div>
           <div className="split-body">
-            <p className="eyebrow">The Persian Knot</p>
-            <h2 className="headline">Why curves need an asymmetric knot</h2>
-            <p className="muted">
-              A symmetric Turkish knot locks the pattern into straight geometry. The asymmetric
-              Senneh knot — half-wrapped around its warp — lets a Bhadohi karigar draw the curl
-              of a vine or the eye of a medallion. It is slower, harder, and the reason our
-              floral fields breathe.
-            </p>
-            <p className="muted">
-              Read the full field guide in the Journal, then see the technique in the pieces
-              themselves.
-            </p>
+            <p className="eyebrow">{content.craftSplit.eyebrow}</p>
+            <h2 className="headline">{content.craftSplit.title}</h2>
+            <p className="muted">{content.craftSplit.body1}</p>
+            {content.craftSplit.body2 && <p className="muted">{content.craftSplit.body2}</p>}
             <div style={{ display: 'flex', gap: 14, marginTop: 26, flexWrap: 'wrap' }}>
-              <Link to="/journal/persian-vs-turkish-knot" className="btn">Read the Field Guide</Link>
-              <Link to="/rugs?tech=hand-knotted" className="btn btn-solid">Hand-Knotted Rugs</Link>
+              <Link to={content.craftSplit.primaryTo} className="btn">{content.craftSplit.primaryLabel}</Link>
+              {content.craftSplit.secondaryLabel && (
+                <Link to={content.craftSplit.secondaryTo ?? '/rugs'} className="btn btn-solid">{content.craftSplit.secondaryLabel}</Link>
+              )}
             </div>
           </div>
         </div>
       </section>
 
-      {/* Best sellers */}
+      {/* Best sellers rail */}
       <section className="wrap section" style={{ paddingTop: 0 }}>
         <Reveal>
           <div className="axis-head">
             <div>
-              <p className="eyebrow">Most Coveted</p>
-              <h2 className="headline">Chosen again and again</h2>
+              <p className="eyebrow">{content.bestSellersRail.eyebrow}</p>
+              <h2 className="headline">{content.bestSellersRail.title}</h2>
             </div>
+            <Link to={content.bestSellersRail.linkTo} className="clear-all">{content.bestSellersRail.linkLabel}</Link>
           </div>
         </Reveal>
-        <div className="related-grid">
-          {bestSellers.map((p, i) => (
-            <Reveal key={p.id} delay={i * 90}>
-              <ProductCard product={p} />
-            </Reveal>
-          ))}
-        </div>
+        <ProductRail products={bestSellers} />
       </section>
 
       {/* Axis 2: Room & Use Case */}
@@ -133,20 +165,55 @@ export default function HomePage() {
         <div className="wrap" style={{ paddingBlock: 'clamp(56px,8vw,110px)' }}>
           <div className="axis-head">
             <div>
-              <p className="eyebrow" style={{ color: 'var(--sand)' }}>By Room &amp; Use</p>
-              <h2 className="headline" style={{ color: 'var(--paper)' }}>Start from your floor plan</h2>
+              <p className="eyebrow" style={{ color: 'var(--sand)' }}>{content.roomsBand.eyebrow}</p>
+              <h2 className="headline" style={{ color: 'var(--paper)' }}>{content.roomsBand.title}</h2>
             </div>
           </div>
           <div className="tiles rooms">
-            {roomTiles.map(({ room, sample }, i) => (
-              <Reveal key={room.slug} delay={i * 70}>
-                <Link to={`/rugs?room=${room.slug}`} className="tile">
-                  <img src={rugImage(sample, 4, 420, 560)} alt={`${room.label} styled with a Rug Bunai piece`} loading="lazy" />
-                  <figcaption><em>{room.label}</em>{productsInCategory(`rugs/${room.slug}`).length} designs</figcaption>
+            {content.roomTiles.map((tile, i) => {
+              const room = ROOMS[i % ROOMS.length];
+              const sample = roomTiles[i]?.sample ?? products[0];
+              return (
+                <Reveal key={i} delay={i * 70}>
+                  <Link to={tile.to || `/rugs?room=${room.slug}`} className="tile">
+                    <img
+                      src={tile.imageUrl ?? rugImage(sample, 4, 420, 560)}
+                      alt={`${tile.title} styled with a Rug Bunai piece`} loading="lazy"
+                    />
+                    <figcaption><em>{tile.title}</em>{productsInCategory(`rugs/${room.slug}`).length} {tile.blurb}</figcaption>
+                  </Link>
+                </Reveal>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* Shop by Colour — curated palette strip */}
+      <section className="wrap section" style={{ paddingTop: 0 }}>
+        <Reveal>
+          <div className="axis-head">
+            <div>
+              <p className="eyebrow">{content.colourBand.eyebrow}</p>
+              <h2 className="headline">{content.colourBand.title}</h2>
+              <p className="muted" style={{ marginTop: 10, maxWidth: '52ch' }}>{content.colourBand.sub}</p>
+            </div>
+            <Link to="/rugs" className="clear-all">All colours →</Link>
+          </div>
+        </Reveal>
+        <div className="colour-grid">
+          {COLORS.map((c, i) => {
+            const count = products.filter((p) => p.colorSlugs.includes(c.slug)).length;
+            return (
+              <Reveal key={c.slug} delay={Math.min(i, 8) * 50}>
+                <Link to={`/rugs?color=${c.slug}`} className="colour-card" aria-label={`Shop ${c.label} rugs`}>
+                  <span className="colour-dot" style={{ background: colorHex(c.slug) }} />
+                  <span className="colour-name">{c.label}</span>
+                  <span className="colour-count">{count} design{count === 1 ? '' : 's'}</span>
                 </Link>
               </Reveal>
-            ))}
-          </div>
+            );
+          })}
         </div>
       </section>
 
@@ -154,17 +221,15 @@ export default function HomePage() {
       <section className="wrap section">
         <div className="split flip">
           <div className="media">
-            <img src={rugImage(getProduct('desert-line-geometric')!, 4, 900, 680)} alt="Geometric tonal rug staged in a minimalist living room" loading="lazy" />
+            <img src={craftImg(content.inspirationSplit, 4)} alt="Geometric tonal rug staged in a minimalist living room" loading="lazy" />
           </div>
           <div className="split-body">
-            <p className="eyebrow">Interior Inspiration</p>
-            <h2 className="headline">Warm minimalism lives underfoot</h2>
-            <p className="muted">
-              In a pared-back room, texture does what colour cannot: it holds light, softens
-              sound, and makes restraint feel generous. Our sizing guide walks through the
-              three front-leg rules that decide whether a rug anchors a room or floats in it.
-            </p>
-            <Link to="/journal/rug-size-guide" className="btn" style={{ marginTop: 22 }}>How to Choose the Right Size</Link>
+            <p className="eyebrow">{content.inspirationSplit.eyebrow}</p>
+            <h2 className="headline">{content.inspirationSplit.title}</h2>
+            <p className="muted">{content.inspirationSplit.body1}</p>
+            <Link to={content.inspirationSplit.primaryTo} className="btn" style={{ marginTop: 22 }}>
+              {content.inspirationSplit.primaryLabel}
+            </Link>
           </div>
         </div>
       </section>
@@ -173,8 +238,8 @@ export default function HomePage() {
       <section className="band">
         <div className="wrap band-inner">
           <div>
-            <p className="eyebrow" style={{ color: 'var(--sand)' }}>The Loom Letter</p>
-            <h2 className="headline" style={{ color: 'var(--paper)', marginTop: 8 }}>One story, one new weave, monthly.</h2>
+            <p className="eyebrow" style={{ color: 'var(--sand)' }}>{content.newsletter.eyebrow}</p>
+            <h2 className="headline" style={{ color: 'var(--paper)', marginTop: 8 }}>{content.newsletter.title}</h2>
           </div>
           <form onSubmit={(e) => { e.preventDefault(); alert('Welcome to the Loom Letter.'); (e.target as HTMLFormElement).reset(); }}>
             <div className="newsletter-form">
@@ -182,7 +247,7 @@ export default function HomePage() {
               <button type="submit">Subscribe</button>
             </div>
             <p style={{ fontSize: '0.7rem', opacity: 0.55, marginTop: 12, letterSpacing: '0.08em' }}>
-              No noise. Unsubscribe anytime.
+              {content.newsletter.note}
             </p>
           </form>
         </div>
