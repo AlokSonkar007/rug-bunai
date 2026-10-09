@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom';
 import { getProduct } from '../data/products';
 import { COLORS, colorHex, ROOMS } from '../data/vocabularies';
-import { productImage } from '../lib/images';
 import { rugImage } from '../lib/rugArt';
 import { Reveal } from '../components/ProductCard';
 import Carousel from '../components/Carousel';
