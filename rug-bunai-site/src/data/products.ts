@@ -26,6 +26,30 @@ export interface Variant {
   readonly stock: number;
 }
 
+/** Build a variant whose dimensions come from the canonical feet size system. */
+export function makeVariant(
+  id: string,
+  skuPrefix: string,
+  label: string,
+  ftW: number,
+  ftL: number,
+  colorSlug: string,
+  priceInr: number,
+  stock: number,
+): Variant {
+  const cm = (ft: number) => Math.round(ft * 30.48);
+  return {
+    id,
+    sku: `${skuPrefix}-${String(Math.round(ftW * 10)).padStart(2, '0')}${String(Math.round(ftL * 10)).padStart(2, '0')}-${colorSlug.slice(0, 2).toUpperCase()}`,
+    sizeLabel: label,
+    width: { cm: cm(ftW), in: Math.round(ftW * 12) },
+    length: { cm: cm(ftL), in: Math.round(ftL * 12) },
+    colorSlug,
+    priceInr,
+    stock,
+  };
+}
+
 /** Exhaustive specification block shown on the PDP. */
 export interface Specifications {
   readonly pileHeightMm: number;
@@ -135,9 +159,9 @@ export const PRODUCTS: readonly Product[] = [
       weaveMonthsApprox: 11,
     },
     variants: [
-      { id: 'v-kr-1', sku: 'KR-2316-IV', sizeLabel: '230 × 160 cm (7\'6" × 5\'3")', width: { cm: 160, in: 63 }, length: { cm: 230, in: 90.5 }, colorSlug: 'ivory', priceInr: 184000, stock: 2 },
-      { id: 'v-kr-2', sku: 'KR-3002-IV', sizeLabel: '300 × 200 cm (9\'10" × 6\'7")', width: { cm: 200, in: 79 }, length: { cm: 300, in: 118 }, colorSlug: 'ivory', priceInr: 296000, stock: 1 },
-      { id: 'v-kr-3', sku: 'KR-2316-SA', sizeLabel: '230 × 160 cm (7\'6" × 5\'3")', width: { cm: 160, in: 63 }, length: { cm: 230, in: 90.5 }, colorSlug: 'sand', priceInr: 184000, stock: 3 },
+      makeVariant('v-kr-1', 'KR', "5' × 8'", 5, 8, 'ivory', 184000, 2),
+      makeVariant('v-kr-2', 'KR', "6' × 9'", 6, 9, 'ivory', 296000, 1),
+      makeVariant('v-kr-3', 'KR', "5' × 8'", 5, 8, 'sand', 184000, 3),
     ],
     rating: 4.9,
     reviewsCount: 41,
@@ -177,9 +201,9 @@ export const PRODUCTS: readonly Product[] = [
       weaveMonthsApprox: 8,
     },
     variants: [
-      { id: 'v-mg-1', sku: 'MG-3602-DB', sizeLabel: '360 × 240 cm (11\'10" × 7\'10")', width: { cm: 240, in: 94.5 }, length: { cm: 360, in: 141.7 }, colorSlug: 'deep-brown', priceInr: 342000, stock: 1 },
-      { id: 'v-mg-2', sku: 'MG-2316-DB', sizeLabel: '230 × 160 cm (7\'6" × 5\'3")', width: { cm: 160, in: 63 }, length: { cm: 230, in: 90.5 }, colorSlug: 'deep-brown', priceInr: 168000, stock: 2 },
-      { id: 'v-mg-3', sku: 'MG-2316-SG', sizeLabel: '230 × 160 cm (7\'6" × 5\'3")', width: { cm: 160, in: 63 }, length: { cm: 230, in: 90.5 }, colorSlug: 'sage', priceInr: 168000, stock: 4 },
+      makeVariant('v-mg-1', 'MG', "9' × 12'", 9, 12, 'deep-brown', 342000, 1),
+      makeVariant('v-mg-2', 'MG', "5' × 8'", 5, 8, 'deep-brown', 168000, 2),
+      makeVariant('v-mg-3', 'MG', "5' × 8'", 5, 8, 'sage', 168000, 4),
     ],
     rating: 4.8,
     reviewsCount: 63,
@@ -216,9 +240,9 @@ export const PRODUCTS: readonly Product[] = [
       weaveMonthsApprox: 6,
     },
     variants: [
-      { id: 'v-dl-1', sku: 'DL-3002-TA', sizeLabel: '300 × 200 cm (9\'10" × 6\'7")', width: { cm: 200, in: 79 }, length: { cm: 300, in: 118 }, colorSlug: 'taupe', priceInr: 224000, stock: 3 },
-      { id: 'v-dl-2', sku: 'DL-2316-TA', sizeLabel: '230 × 160 cm (7\'6" × 5\'3")', width: { cm: 160, in: 63 }, length: { cm: 230, in: 90.5 }, colorSlug: 'taupe', priceInr: 138000, stock: 5 },
-      { id: 'v-dl-3', sku: 'DL-1601-SA', sizeLabel: '160 × 120 cm (5\'3" × 4\')', width: { cm: 120, in: 47 }, length: { cm: 160, in: 63 }, colorSlug: 'sand', priceInr: 78000, stock: 6 },
+      makeVariant('v-dl-1', 'DL', "6' × 9'", 6, 9, 'taupe', 224000, 3),
+      makeVariant('v-dl-2', 'DL', "5' × 8'", 5, 8, 'taupe', 138000, 5),
+      makeVariant('v-dl-3', 'DL', "4' × 6'", 4, 6, 'sand', 78000, 6),
     ],
     rating: 4.7,
     reviewsCount: 88,
@@ -255,9 +279,9 @@ export const PRODUCTS: readonly Product[] = [
       careInstructions: 'Vacuum on low suction. Spot-clean with cold water and mild detergent. Avoid prolonged direct sunlight.',
     },
     variants: [
-      { id: 'v-ss-1', sku: 'SS-2316-CH', sizeLabel: '230 × 160 cm (7\'6" × 5\'3")', width: { cm: 160, in: 63 }, length: { cm: 230, in: 90.5 }, colorSlug: 'charcoal', priceInr: 74000, stock: 8 },
-      { id: 'v-ss-2', sku: 'SS-1601-BK', sizeLabel: '160 × 120 cm (5\'3" × 4\')', width: { cm: 120, in: 47 }, length: { cm: 160, in: 63 }, colorSlug: 'black', priceInr: 46000, stock: 10 },
-      { id: 'v-ss-3', sku: 'SS-3002-CH', sizeLabel: '300 × 200 cm (9\'10" × 6\'7")', width: { cm: 200, in: 79 }, length: { cm: 300, in: 118 }, colorSlug: 'charcoal', priceInr: 118000, stock: 4 },
+      makeVariant('v-ss-1', 'SS', "5' × 8'", 5, 8, 'charcoal', 74000, 8),
+      makeVariant('v-ss-2', 'SS', "4' × 6'", 4, 6, 'black', 46000, 10),
+      makeVariant('v-ss-3', 'SS', "6' × 9'", 6, 9, 'charcoal', 118000, 4),
     ],
     rating: 4.6,
     reviewsCount: 134,
@@ -291,9 +315,9 @@ export const PRODUCTS: readonly Product[] = [
       careInstructions: 'Shake or vacuum both faces. Gentle cold machine wash separately; dry flat in shade.',
     },
     variants: [
-      { id: 'v-rs-1', sku: 'RS-3002-IV', sizeLabel: '300 × 200 cm (9\'10" × 6\'7")', width: { cm: 200, in: 79 }, length: { cm: 300, in: 118 }, colorSlug: 'ivory', priceInr: 52000, stock: 7 },
-      { id: 'v-rs-2', sku: 'RS-2316-TC', sizeLabel: '230 × 160 cm (7\'6" × 5\'3")', width: { cm: 160, in: 63 }, length: { cm: 230, in: 90.5 }, colorSlug: 'terracotta', priceInr: 38000, stock: 9 },
-      { id: 'v-rs-3', sku: 'RS-1601-IV', sizeLabel: '160 × 120 cm (5\'3" × 4\')', width: { cm: 120, in: 47 }, length: { cm: 160, in: 63 }, colorSlug: 'ivory', priceInr: 24000, stock: 12 },
+      makeVariant('v-rs-1', 'RF', "6' × 9'", 6, 9, 'ivory', 52000, 7),
+      makeVariant('v-rs-2', 'RF', "5' × 8'", 5, 8, 'terracotta', 38000, 9),
+      makeVariant('v-rs-3', 'RF', "4' × 6'", 4, 6, 'ivory', 24000, 12),
     ],
     rating: 4.5,
     reviewsCount: 212,
@@ -326,8 +350,8 @@ export const PRODUCTS: readonly Product[] = [
       careInstructions: 'Vacuum frequently; keep away from persistent damp. Dry-clean only for stains.',
     },
     variants: [
-      { id: 'v-mr-1', sku: 'MR-30008-SG', sizeLabel: '300 × 80 cm (9\'10" × 2\'7")', width: { cm: 80, in: 31.5 }, length: { cm: 300, in: 118 }, colorSlug: 'sage', priceInr: 28000, stock: 11 },
-      { id: 'v-mr-2', sku: 'MR-40008-SA', sizeLabel: '400 × 80 cm (13\'1" × 2\'7")', width: { cm: 80, in: 31.5 }, length: { cm: 400, in: 157.5 }, colorSlug: 'sand', priceInr: 36000, stock: 6 },
+      makeVariant('v-mr-1', 'MR', "5' × 8'", 5, 8, 'sage', 28000, 11),
+      makeVariant('v-mr-2', 'MR', "5' × 8'", 5, 8, 'sand', 36000, 6),
     ],
     rating: 4.4,
     reviewsCount: 57,
@@ -360,8 +384,8 @@ export const PRODUCTS: readonly Product[] = [
       careInstructions: 'Vacuum without beater bar. Blot spills; professional clean recommended. Rotate quarterly.',
     },
     variants: [
-      { id: 'v-ld-1', sku: 'LD-2316-CH', sizeLabel: '230 × 160 cm (7\'6" × 5\'3")', width: { cm: 160, in: 63 }, length: { cm: 230, in: 90.5 }, colorSlug: 'charcoal', priceInr: 96000, stock: 5 },
-      { id: 'v-ld-2', sku: 'LD-3002-IV', sizeLabel: '300 × 200 cm (9\'10" × 6\'7")', width: { cm: 200, in: 79 }, length: { cm: 300, in: 118 }, colorSlug: 'ivory', priceInr: 148000, stock: 2 },
+      makeVariant('v-ld-1', 'LD', "5' × 8'", 5, 8, 'charcoal', 96000, 5),
+      makeVariant('v-ld-2', 'LD', "6' × 9'", 6, 9, 'ivory', 148000, 2),
     ],
     rating: 4.8,
     reviewsCount: 29,
@@ -397,9 +421,9 @@ export const PRODUCTS: readonly Product[] = [
       weaveMonthsApprox: 9,
     },
     variants: [
-      { id: 'v-ah-1', sku: 'AH-3602-NV', sizeLabel: '360 × 240 cm (11\'10" × 7\'10")', width: { cm: 240, in: 94.5 }, length: { cm: 360, in: 141.7 }, colorSlug: 'navy', priceInr: 388000, stock: 1 },
-      { id: 'v-ah-2', sku: 'AH-3002-NV', sizeLabel: '300 × 200 cm (9\'10" × 6\'7")', width: { cm: 200, in: 79 }, length: { cm: 300, in: 118 }, colorSlug: 'navy', priceInr: 268000, stock: 2 },
-      { id: 'v-ah-3', sku: 'AH-2316-SA', sizeLabel: '230 × 160 cm (7\'6" × 5\'3")', width: { cm: 160, in: 63 }, length: { cm: 230, in: 90.5 }, colorSlug: 'sand', priceInr: 156000, stock: 3 },
+      makeVariant('v-ah-1', 'AH', "9' × 12'", 9, 12, 'navy', 388000, 1),
+      makeVariant('v-ah-2', 'AH', "6' × 9'", 6, 9, 'navy', 268000, 2),
+      makeVariant('v-ah-3', 'AH', "5' × 8'", 5, 8, 'sand', 156000, 3),
     ],
     rating: 4.9,
     reviewsCount: 36,
