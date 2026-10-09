@@ -38,8 +38,26 @@ export default function AdminPage() {
         name: form.name,
         slug,
         description: form.description,
-        priceInr: Number(form.price),
         imageUrl,
+      
+        // Default product classification
+        techniqueSlug: 'hand-knotted',
+        materialSlug: 'wool',
+        roomSlugs: ['living-room'],
+        styleSlugs: ['modern'],
+        categorySlugs: [],
+      
+        // Default size, colour, price and stock
+        offers: [
+          {
+            sizeKey: '6x9',
+            widthFt: 6,
+            lengthFt: 9,
+            colorSlug: 'ivory',
+            priceInr: Number(form.price),
+            stock: 1,
+          },
+        ],
       });
       setForm(initialForm);
       setNewPhoto(null);
