@@ -2,6 +2,46 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import type { Session, User } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabase } from './supabase';
 
+/**
+ * Supabase-js persists the auth session in localStorage under `sb-<ref>-auth-token`.
+ * Stale entries left over from a previous project URL or a malformed env value
+ * (e.g. a `/rest/v1/` endpoint pasted into VITE_SUPABASE_URL) make every sign-in
+ * attempt fail. On startup we drop any stored session whose ref does not match
+ * the currently configured project so authentication always starts clean.
+ */
+function pruneStaleAuthStorage() {
+  try {
+    const activeRef = (() => {
+      if (!isSupabaseConfigured) return null;
+      const url = import.meta.env.VITE_SUPABASE_URL as string;
+      try {
+        return new URL(url).hostname.split('.')[0]; // e.g. "vuizbcyjresemsoiatfr"
+      } catch {
+        return null;
+      }
+    })();
+    const doomed: string[] = [];
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith('sb-')) continue;
+      if (key === 'sb-callback-query-params' || key === 'sb-customer-code-verifier') {
+        doomed.push(key); // transient OAuth artifacts
+        continue;
+      }
+      const isClientKey = key === 'sb__client__' || key.startsWith('sb__client__');
+      if (isClientKey) { doomed.push(key); continue; }
+      if (activeRef) {
+        const matches = key.startsWith(`sb-${activeRef}-`) || key === `sb-${activeRef}`;
+        if (!matches) doomed.push(key); // session from a different/older project
+      }
+    }
+    doomed.forEach((key) => localStorage.removeItem(key));
+  } catch {
+    /* localStorage unavailable (private mode etc.) — nothing to clean */
+  }
+}
+pruneStaleAuthStorage();
+
 export type UserRole = 'customer' | 'admin';
 export type Profile = { id: string; email: string; role: UserRole; display_name: string | null };
 
@@ -34,8 +74,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .select('id, email, role, display_name')
       .eq('id', user.id)
       .single();
-    if (error) throw error;
-    return data as Profile;
+    if (!error && data) return data as Profile;
+
+    // The auth user exists but the trigger-created profile row is missing or
+    // RLS blocked the read. Try to insert it so sign-in never dead-ends…
+    const fallback: Profile = {
+      id: user.id,
+      email: user.email ?? '',
+      role: 'customer',
+      display_name: (user.user_metadata?.display_name as string | undefined) ?? null,
+    };
+    const { error: insertError } = await supabase.from('profiles').insert({
+      id: fallback.id, email: fallback.email, display_name: fallback.display_name, role: fallback.role,
+    });
+    if (!insertError) return fallback;
+    // …and if even that is blocked (RLS without the self-insert policy), fall
+    // back to a customer profile derived straight from the JWT so the session
+    // stays usable instead of throwing "Invalid Login Credentials".
+    console.warn('profile recovery failed — using session-derived profile:', insertError.message);
+    return fallback;
   }, []);
 
   const hydrate = useCallback(async (nextSession: Session | null) => {

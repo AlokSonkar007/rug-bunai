@@ -85,6 +85,12 @@ alter table public.managed_products enable row level security;
 create policy "Customers view their own profile" on public.profiles
   for select using (auth.uid() = id);
 
+-- Self-heal: if the signup trigger ever failed to run (or profiles were created
+-- before the trigger existed), the first sign-in inserts its own row. Without
+-- this policy loadProfile()'s recovery insert is blocked by RLS and login breaks.
+create policy "Users create their own profile" on public.profiles
+  for insert with check (auth.uid() = id);
+
 create policy "Customers manage their own wishlist" on public.wishlist_items
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
