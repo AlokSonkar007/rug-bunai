@@ -2,16 +2,34 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useCart } from '../lib/cart';
 import { useAuth } from '../lib/auth';
-import { MATERIALS, ROOMS, TECHNIQUES } from '../data/vocabularies';
+import { CARPET_CATEGORIES, MATERIALS, ROOMS, TECHNIQUES } from '../data/vocabularies';
 import { rugImage } from '../lib/rugArt';
 import { getProduct } from '../data/products';
 import { CONTACT_PHONE_DISPLAY, WHATSAPP_TEL_HREF } from '../lib/siteContent';
 
 /** Desktop "Collections" mega-menu content — shared by hover panel & mobile drawer. */
+
+/** Curated design categories split into two scannable columns (9 + 6). */
+const CATEGORY_COLUMNS: [number, number] = [9, CARPET_CATEGORIES.length - 9];
+
 function MegaMenu({ onNavigate }: { onNavigate?: () => void }) {
   const feature = getProduct('kashmiri-rose-medallion');
   return (
     <div className="mega-grid">
+      <div className="mega-col mega-wide">
+        <p className="eyebrow">Shop by Design Category</p>
+        <div className="mega-cat-cols">
+          {[CARPET_CATEGORIES.slice(0, CATEGORY_COLUMNS[0]), CARPET_CATEGORIES.slice(CATEGORY_COLUMNS[0])].map((col, i) => (
+            <ul key={i}>
+              {col.map((cat) => (
+                <li key={cat.slug}>
+                  <Link to={`/collections/${cat.slug}`} onClick={onNavigate}>{cat.label}</Link>
+                </li>
+              ))}
+            </ul>
+          ))}
+        </div>
+      </div>
       <div className="mega-col">
         <p className="eyebrow">By Technique</p>
         <ul>
@@ -41,6 +59,9 @@ function MegaMenu({ onNavigate }: { onNavigate?: () => void }) {
             </li>
           ))}
         </ul>
+        <p className="mega-view-all">
+          <Link to="/rugs" onClick={onNavigate}>View all rugs →</Link>
+        </p>
       </div>
       {feature && (
         <div className="mega-col mega-feature">
@@ -234,6 +255,14 @@ export default function Layout() {
             <details className="drawer-group" open>
               <summary>Collections</summary>
               <div className="drawer-sub">
+                <p className="eyebrow">Design Category</p>
+                <ul className="drawer-cat-list">
+                  {CARPET_CATEGORIES.map((c) => (
+                    <li key={c.slug}>
+                      <Link to={`/collections/${c.slug}`}>{c.label}</Link>
+                    </li>
+                  ))}
+                </ul>
                 <p className="eyebrow">Technique</p>
                 <div className="drawer-chips">
                   {TECHNIQUES.map((t) => (<Link key={t.slug} to={`/rugs?tech=${t.slug}`}>{t.label}</Link>))}
@@ -313,19 +342,28 @@ export function SiteFooter() {
         <div className="footer-col">
           <h4>Collections</h4>
           <ul>
-            <li><Link to="/rugs?tech=hand-knotted">Hand-Knotted</Link></li>
-            <li><Link to="/rugs?tech=hand-tufted">Hand-Tufted</Link></li>
-            <li><Link to="/rugs?tech=flat-woven">Flat-Woven</Link></li>
-            <li><Link to="/rugs?tech=loom-woven">Loom-Woven</Link></li>
+            {CARPET_CATEGORIES.slice(0, 6).map((c) => (
+              <li key={c.slug}><Link to={`/collections/${c.slug}`}>{c.label}</Link></li>
+            ))}
             <li><Link to="/rugs">All Rugs</Link></li>
           </ul>
         </div>
         <div className="footer-col">
-          <h4>Rooms</h4>
+          <h4>More Collections</h4>
           <ul>
+            {CARPET_CATEGORIES.slice(6, 12).map((c) => (
+              <li key={c.slug}><Link to={`/collections/${c.slug}`}>{c.label}</Link></li>
+            ))}
+          </ul>
+        </div>
+        <div className="footer-col">
+          <h4>Finish &amp; Rooms</h4>
+          <ul>
+            <li><Link to="/rugs?tech=hand-knotted">Hand-Knotted</Link></li>
+            <li><Link to="/rugs?tech=hand-tufted">Hand-Tufted</Link></li>
+            <li><Link to="/rugs?tech=flat-woven">Flat-Woven</Link></li>
             <li><Link to="/rugs?room=living-room">Living Room</Link></li>
             <li><Link to="/rugs?room=bedroom">Bedroom</Link></li>
-            <li><Link to="/rugs?room=dining-room">Dining Room</Link></li>
             <li><Link to="/rugs?room=hallway">Hallways &amp; Runners</Link></li>
           </ul>
         </div>
