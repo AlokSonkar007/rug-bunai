@@ -343,7 +343,7 @@ function HeroSlidesEditor({ onUpload }: { onUpload: (file: File) => Promise<stri
         label="Hero image"
         currentUrl={slide.imageUrl}
         fallbackSrc={rugImage(getProduct(slide.productSlug) ?? ({} as never), 4, 320, 200)}
-        note="This photo replaces the hero background of Slide " + (idx + 1) + " on the homepage directly. Leave unset to keep the generated rug artwork for this design. (The separate “Homepage Products” control below only changes a product's rail/hero-seed photo — it does not set a slide's image.)"
+        note={`This photo replaces the hero background of Slide ${idx + 1} on the homepage directly. Leave unset to keep the generated rug artwork for this design. (The separate “Homepage Products” control below only changes a product's rail/hero-seed photo — it does not set a slide's image.)`}
         onUpload={onUpload}
         onSave={async (url) => { await patchSlide({ imageUrl: url }); }}
       />
