@@ -6,6 +6,7 @@ import { useSiteContent, type TextOverride } from './siteContent';
 import { useAuth } from './auth';
 import { supabase } from './supabase';
 import { dedupeColourOptions, isValidHex, type ProductColourOption } from './colours';
+import { sanitizeGallery } from './productGallery';
 
 export type CatalogProduct = Product & {
   imageUrl?: string | null;
@@ -55,6 +56,8 @@ export type NewProductInput = {
   offers: OfferInput[];
   /** Admin-defined colour options for this rug (Studio > Colours). */
   colourOptions?: ProductColourOption[];
+  /** Optional additional photographs uploaded alongside the primary image. */
+  gallery?: string[];
 };
 
 type CatalogContextValue = {
@@ -67,6 +70,9 @@ type CatalogContextValue = {
   changeProductPhoto: (product: CatalogProduct, file: File) => Promise<void>;
   /** Persist admin-managed colour options for any catalogue product. */
   saveProductColours: (product: CatalogProduct, options: ProductColourOption[]) => Promise<void>;
+  /** Persist the full gallery state (primary + ordered additional photos)
+   *  for any catalogue product in one operation. */
+  saveProductGallery: (product: CatalogProduct, primaryUrl: string | null, gallery: string[]) => Promise<void>;
 };
 
 const CatalogContext = createContext<CatalogContextValue | null>(null);
@@ -137,13 +143,19 @@ function managedProduct(row: ManagedRow): CatalogProduct {
     imageSeed: saved.imageSeed ?? row.slug,
     thumbnailCount: saved.thumbnailCount ?? 1,
     relationships: saved.relationships ?? [],
+    // Additional photos live inside the managed JSON record; sanitise so a
+    // legacy/corrupt value degrades to "no additional images" (never crashes).
+    gallery: sanitizeGallery(saved.gallery, row.image_url),
     imageUrl: row.image_url,
     isManaged: true,
     managedId: row.id,
   };
 }
 
-function newProductPayload(input: NewProductInput): Product {
+/** Build the canonical Product record for a newly created managed product.
+ *  Exported so tests (and any future server-side path) can validate the exact
+ *  payload that `createManagedProduct` persists. */
+export function newProductPayload(input: NewProductInput): Product {
   const id = crypto.randomUUID();
   const prefix = input.slug.split('-').map((w) => w[0]?.toUpperCase() ?? '').join('').slice(0, 2) || 'RB';
   const colors = [...new Set(input.offers.map((o) => o.colorSlug))];
@@ -184,12 +196,13 @@ function newProductPayload(input: NewProductInput): Product {
     imageSeed: input.slug,
     thumbnailCount: 1,
     relationships: [],
+    gallery: sanitizeGallery(input.gallery, input.imageUrl),
   };
 }
 
 export function CatalogProvider({ children }: { children: ReactNode }) {
   const { user, profile } = useAuth();
-  const { productOverrides, saveProductHidden, saveProductImage, saveProductText } = useSiteContent();
+  const { productOverrides, saveProductHidden, saveProductImage, saveProductText, saveProductGallery: saveOverrideGallery } = useSiteContent();
   const [remoteProducts, setRemoteProducts] = useState<CatalogProduct[]>([...PRODUCTS]);
   const [loading, setLoading] = useState(Boolean(supabase));
 
@@ -235,6 +248,9 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
         ...(ov.text?.customRatePerSqFt !== undefined ? { customRatePerSqFt: ov.text.customRatePerSqFt } : {}),
         imageUrl: ov.imageUrl !== undefined ? ov.imageUrl : product.imageUrl,
         homeImageUrl: ov.homeImageUrl ?? null,
+        // Studio-managed additional photographs (base products live in the
+        // overrides document; managed products carry their own JSON gallery).
+        ...(ov.gallery !== undefined ? { gallery: sanitizeGallery(ov.gallery, ov.imageUrl ?? product.imageUrl) } : {}),
       };
     });
     return merged.filter((product) => !productOverrides[product.slug]?.hidden);
@@ -257,6 +273,12 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
 
   const createManagedProduct = useCallback(async (input: NewProductInput) => {
     if (!supabase || !user) throw new Error('Sign in as an admin before adding a product. Configure Supabase in .env to publish new designs.');
+    // Server-side guard: reject empty/unsupported classifications and missing
+    // primary photography BEFORE anything is written, so no half-configured
+    // product can ever enter the catalogue.
+    if (!input.imageUrl) throw new Error('A primary product photo is required before saving a new product.');
+    if (!TECHNIQUES.some((term) => term.slug === input.techniqueSlug)) throw new Error('Please select a valid technique for this product.');
+    if (!MATERIALS.some((term) => term.slug === input.materialSlug)) throw new Error('Please select a valid material for this product.');
     const payload = newProductPayload(input);
     const { error } = await supabase.from('managed_products').insert({
       slug: input.slug,
@@ -291,19 +313,63 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
   const changeProductPhoto = useCallback(async (product: CatalogProduct, file: File) => {
     const imageUrl = await uploadProductPhoto(file);
     if (supabase) {
+      // Preserve the product's additional photographs when replacing the
+      // primary — the old Storage object may still be referenced by the
+      // gallery, so we never delete it here.
+      const extras = sanitizeGallery(product.gallery, product.imageUrl);
       const result = product.isManaged
-        ? await supabase.from('managed_products').update({ image_url: imageUrl }).eq('id', product.managedId!)
+        ? await supabase
+            .from('managed_products')
+            .update({ image_url: imageUrl, product: { ...product, imageUrl, gallery: sanitizeGallery(extras, imageUrl) } })
+            .eq('id', product.managedId!)
         : await supabase.from('product_overrides').upsert({
             product_slug: product.slug,
             image_url: imageUrl,
             is_hidden: false,
           });
       if (result.error) throw result.error;
+      if (!product.isManaged && extras.length) await saveOverrideGallery(product.slug, imageUrl, extras);
       await refresh();
     } else {
       await saveProductImage(product.slug, imageUrl);
     }
-  }, [refresh, uploadProductPhoto, saveProductImage]);
+  }, [refresh, uploadProductPhoto, saveProductImage, saveOverrideGallery]);
+
+  /** Persist a product's full gallery (primary + ordered additional photos).
+   *  One atomic write per backend path: managed products update their JSONB
+   *  record and `image_url` together; base products write both the DB override
+   *  column and the Studio overrides document. The sanitiser guarantees the
+   *  stored gallery never contains the primary URL or duplicates, so a failed
+   *  optional upload can never corrupt or remove the primary photograph. */
+  const saveProductGallery = useCallback(async (product: CatalogProduct, primaryUrl: string | null, gallery: string[]) => {
+    if (!user || profile?.role !== 'admin') {
+      throw new Error('Only administrators can manage product images.');
+    }
+    const clean = sanitizeGallery(gallery, primaryUrl);
+    if (supabase && product.isManaged) {
+      const { error } = await supabase
+        .from('managed_products')
+        .update({ image_url: primaryUrl, product: { ...product, imageUrl: primaryUrl, gallery: clean } })
+        .eq('id', product.managedId!);
+      if (error) throw error;
+      await refresh();
+      return;
+    }
+    if (supabase) {
+      const { error } = await supabase.from('product_overrides').upsert({
+        product_slug: product.slug,
+        image_url: primaryUrl,
+        is_hidden: false,
+      });
+      if (error) throw error;
+      await saveOverrideGallery(product.slug, primaryUrl, clean);
+      await refresh();
+      return;
+    }
+    // No backend configured — persist through the local content store so the
+    // gallery survives a refresh on this device (documented limitation).
+    await saveOverrideGallery(product.slug, primaryUrl, clean);
+  }, [user, profile, refresh, saveOverrideGallery]);
 
   /** Persist admin-managed colour options for a product.
    * Managed products update their JSON record directly; base catalogue items
@@ -342,8 +408,8 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
   }, [user, profile, refresh, saveProductText]);
 
   const value = useMemo(() => ({
-    products, loading, refresh, uploadProductPhoto, createManagedProduct, removeProduct, changeProductPhoto, saveProductColours,
-  }), [changeProductPhoto, createManagedProduct, loading, products, refresh, uploadProductPhoto, saveProductColours]);
+    products, loading, refresh, uploadProductPhoto, createManagedProduct, removeProduct, changeProductPhoto, saveProductColours, saveProductGallery,
+  }), [changeProductPhoto, createManagedProduct, loading, products, refresh, saveProductColours, saveProductGallery, uploadProductPhoto]);
 
   return <CatalogContext.Provider value={value}>{children}</CatalogContext.Provider>;
 }

@@ -117,9 +117,11 @@ main { flex: 1; }
 }
 .header-grid {
   display: grid;
+  /* Brand block and primary navigation are separated by a deliberate gap so
+     "All Rugs" never crowds the logo; nav ↔ actions get its own gap. */
   grid-template-columns: auto 1fr auto;
   align-items: center;
-  gap: clamp(16px, 3vw, 40px);
+  column-gap: clamp(28px, 5vw, 72px);
   padding-block: 10px;
 }
 .brand {
@@ -157,7 +159,11 @@ main { flex: 1; }
 }
 .nav a:hover::after, .nav a[aria-current='page']::after { width: 100%; }
 .header-actions { justify-self: end; display: flex; gap: 18px; align-items: center; flex-wrap: nowrap; }
+/* Intentional separation between "Our Story" (end of nav) and the search
+   control — the actions group starts a measured distance after the nav. */
+.nav-desktop { padding-inline-end: clamp(16px, 2vw, 32px); }
 @media (max-width: 1180px) {
+  .nav-desktop { padding-inline-end: 0; }
   /* Mid widths: trade the inline account links for the drawer so the
      primary nav + bag stay on one compact row without crowding. */
   .account-links { display: none !important; }
@@ -813,10 +819,17 @@ html, body { max-width: 100%; overflow-x: clip; }
   background: var(--paper);
   border: 1px solid var(--line);
   box-shadow: 0 30px 60px -30px rgba(29, 26, 22, 0.35);
-  padding: clamp(24px, 3vw, 40px);
+  padding: clamp(20px, 2.6vw, 34px);
   min-width: min(880px, 86vw);
   z-index: 960;
   animation: megaIn 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  /* Viewport-safety: the panel is anchored to the sticky header, so a
+     max-height of (100vh − header offset − bottom breathing room) guarantees
+     it never touches or overflows the bottom edge. Shorter screens scroll
+     inside the panel instead of clipping links or overflowing the document. */
+  max-height: calc(100vh - 150px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 /* invisible bridge so the panel doesn't close in the gap between trigger & panel */
 .mega-panel::before { content: ''; position: absolute; top: -30px; left: 0; right: 0; height: 30px; }

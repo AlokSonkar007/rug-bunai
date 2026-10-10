@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { formatINR } from '../data/products';
 import { CLASSIFICATIONS, findTerm, MATERIALS, TECHNIQUES } from '../data/vocabularies';
-import { productImage } from '../lib/images';
+import { galleryImageAt, galleryViewCount } from '../lib/images';
 import { useCatalog } from '../lib/catalog';
 import { useSiteContent } from '../lib/siteContent';
 import { useWishlist } from '../lib/wishlist';
@@ -177,6 +177,9 @@ export default function ProductPage() {
   const tech = findTerm(TECHNIQUES, product.techniqueSlug)?.label ?? '';
   const mat = findTerm(MATERIALS, product.materialSlug)?.label ?? '';
   const classification = findTerm(CLASSIFICATIONS, product.classificationSlug)?.label ?? '';
+  // Real persisted photographs drive the gallery strip; products with only a
+  // primary photo show exactly one thumbnail (no fake duplicates).
+  const viewCount = galleryViewCount(product);
   const related = product.relationships
     .map((r) => products.find((candidate) => candidate.id === r.targetId))
     .filter((p): p is NonNullable<typeof p> => Boolean(p));
@@ -275,22 +278,24 @@ export default function ProductPage() {
       </nav>
 
       <div className="pdp">
-        {/* Gallery — thumbnail strip exposes every angle (5–15 per spec) */}
+        {/* Gallery — one thumbnail per REAL persisted photo (primary first).
+            Products without uploaded photography fall back to generated art
+            angles; the primary image is never duplicated to fill slots. */}
         <section aria-label={`Photography of ${product.name}`}>
           <div className={`gallery-main ${zoom ? 'zoomed' : ''}`} onClick={() => setZoom((z) => !z)} title={zoom ? 'Click to zoom out' : 'Click to zoom into weave detail'}>
-            <img src={productImage(product, angle, 1200, 900)} alt={`${product.name} — view ${angle + 1} of ${product.thumbnailCount}`} />
+            <img src={galleryImageAt(product, angle, 1200, 900)} alt={`${product.name} — view ${angle + 1} of ${viewCount}`} />
           </div>
           <div className="gallery-thumbs" role="tablist" aria-label="Product views">
-            {Array.from({ length: product.thumbnailCount }, (_, i) => (
+            {Array.from({ length: viewCount }, (_, i) => (
               <button
-                key={i}
+                key={`${i}:${galleryImageAt(product, i, 64, 64)}`}
                 role="tab"
                 aria-selected={i === angle}
                 aria-current={i === angle}
-                aria-label={`View ${i + 1}: ${['full rug', 'weave macro', 'corner detail', 'fringe finish', 'styled in room'][i % 5]}`}
+                aria-label={i === 0 ? `View 1: ${product.name} primary photo` : `View ${i + 1}: additional photo ${i} of ${product.name}`}
                 onClick={() => { setAngle(i); setZoom(false); }}
               >
-                <img src={productImage(product, i, 184, 184)} alt="" loading="lazy" />
+                <img src={galleryImageAt(product, i, 184, 184)} alt="" loading="lazy" />
               </button>
             ))}
           </div>

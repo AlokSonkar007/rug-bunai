@@ -11,6 +11,7 @@ import {
 } from 'react';
 import type { Product } from '../data/products';
 import { supabase } from './supabase';
+import { sanitizeGallery } from './productGallery';
 
 export const WHATSAPP_NUMBER = '919555036025'; // +91-9555036025
 export const CONTACT_PHONE_DISPLAY = '+91 95550 36025';
@@ -294,7 +295,13 @@ function withStamp(payload: StoredSiteRecord, baseRev: number): StoredSiteRecord
  */
 export type TextOverride = Partial<Pick<Product, 'name' | 'tagline' | 'description' | 'craftStory' | 'colorSlugs' | 'colourOptions'>>
   & { specs?: { careInstructions?: string }; customRatePerSqFt?: number | null; /** Admin copy for the PDP Specifications table. */ specNotes?: string };
-export type ProductOverrideMap = Record<string, { text?: TextOverride; imageUrl?: string | null; homeImageUrl?: string | null; hidden?: boolean }>;
+/**
+ * Per-product Studio overrides. `imageUrl` remains the PRIMARY photograph
+ * (single source of truth shared with the `product_overrides.image_url`
+ * column); `gallery` holds only ADDITIONAL admin-managed photographs and is
+ * never allowed to contain the primary URL (see lib/productGallery.ts).
+ */
+export type ProductOverrideMap = Record<string, { text?: TextOverride; imageUrl?: string | null; homeImageUrl?: string | null; hidden?: boolean; gallery?: string[] }>;
 
 function readLS<T>(key: string, fallback: T): T {
   try {
@@ -317,6 +324,9 @@ export type SiteContentCtx = {
   /** Edit just the Care-instructions copy of a product. */
   saveProductCare: (slugKey: string, careInstructions: string) => Promise<void>;
   saveProductImage: (slugKey: string, url: string | null) => Promise<void>;
+  /** Persist the full gallery state for a base-catalogue product in one
+   *  atomic write: primary image + additional photos (order included). */
+  saveProductGallery: (slugKey: string, primaryUrl: string | null, gallery: string[]) => Promise<void>;
   /** Homepage-only photo override — does not change the catalogue/PDP image. */
   saveProductHomeImage: (slugKey: string, url: string | null) => Promise<void>;
   saveProductHidden: (slugKey: string, hidden: boolean) => Promise<void>;
@@ -480,6 +490,17 @@ export function SiteContentProvider({ children }: { children: ReactNode }) {
     await persist(cur, { ...ov, [productSlug]: { ...ov[productSlug], imageUrl } });
   }, [loadPair, persist]);
 
+  /** Persist primary + additional gallery photos for a base-catalogue product
+   *  in ONE atomic write of the overrides document. The gallery list is
+   *  sanitised so it can never contain the primary URL or duplicates — an
+   *  optional gallery upload failing leaves the primary untouched because the
+   *  caller only invokes this after every remaining file uploaded successfully. */
+  const saveProductGallery = useCallback(async (productSlug: string, primaryUrl: string | null, gallery: string[]) => {
+    const [cur, ov] = await loadPair();
+    const clean = sanitizeGallery(gallery, primaryUrl);
+    await persist(cur, { ...ov, [productSlug]: { ...ov[productSlug], imageUrl: primaryUrl, gallery: clean } });
+  }, [loadPair, persist]);
+
   /** Persist a homepage-specific photo for one product without touching its
       catalogue image (`imageUrl`) or any other field of the record. */
   const saveProductHomeImage = useCallback(async (productSlug: string, homeImageUrl: string | null) => {
@@ -497,8 +518,8 @@ export function SiteContentProvider({ children }: { children: ReactNode }) {
   }, [persist]);
 
   const value = useMemo<SiteContentCtx>(() => ({
-    content, productOverrides, saveContent, saveCollectionContent, saveProductText, saveProductCare, saveProductImage, saveProductHomeImage, saveProductHidden, resetAll, saving,
-  }), [content, productOverrides, saveContent, saveCollectionContent, saveProductText, saveProductCare, saveProductImage, saveProductHomeImage, saveProductHidden, resetAll, saving]);
+    content, productOverrides, saveContent, saveCollectionContent, saveProductText, saveProductCare, saveProductImage, saveProductGallery, saveProductHomeImage, saveProductHidden, resetAll, saving,
+  }), [content, productOverrides, saveContent, saveCollectionContent, saveProductText, saveProductCare, saveProductImage, saveProductGallery, saveProductHomeImage, saveProductHidden, resetAll, saving]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
