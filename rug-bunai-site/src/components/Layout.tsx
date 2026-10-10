@@ -3,8 +3,6 @@ import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from
 import { useCart } from '../lib/cart';
 import { useAuth } from '../lib/auth';
 import { CARPET_CATEGORIES, MATERIALS, ROOMS, TECHNIQUES } from '../data/vocabularies';
-import { rugImage } from '../lib/rugArt';
-import { getProduct } from '../data/products';
 import { CONTACT_PHONE_DISPLAY, WHATSAPP_TEL_HREF, useSiteContent } from '../lib/siteContent';
 
 /** Desktop "Collections" mega-menu content — shared by hover panel & mobile drawer. */
@@ -13,7 +11,6 @@ import { CONTACT_PHONE_DISPLAY, WHATSAPP_TEL_HREF, useSiteContent } from '../lib
 const CATEGORY_COLUMNS: [number, number] = [9, CARPET_CATEGORIES.length - 9];
 
 function MegaMenu({ onNavigate }: { onNavigate?: () => void }) {
-  const feature = getProduct('kashmiri-rose-medallion');
   return (
     <div className="mega-grid">
       <div className="mega-col mega-wide">
@@ -63,14 +60,6 @@ function MegaMenu({ onNavigate }: { onNavigate?: () => void }) {
           <Link to="/rugs" onClick={onNavigate}>View all rugs →</Link>
         </p>
       </div>
-      {feature && (
-        <div className="mega-col mega-feature">
-          <Link to="/rugs?sort=newest" onClick={onNavigate} className="mega-tile">
-            <img src={rugImage(feature, 0, 420, 300)} alt="" loading="lazy" />
-            <span className="mega-tile-label">New this season →</span>
-          </Link>
-        </div>
-      )}
     </div>
   );
 }
@@ -161,13 +150,14 @@ export default function Layout() {
               <button
                 className={`mega-trigger ${megaOpen ? 'open' : ''}`}
                 aria-expanded={megaOpen}
+                onKeyDown={(e) => { if (e.key === 'Escape') setMegaOpen(false); }}
                 onClick={() => setMegaOpen((o) => !o)}
               >
                 Collections
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m5 9 7 7 7-7"/></svg>
               </button>
               {megaOpen && (
-                <div className="mega-panel" onMouseEnter={openMega} onMouseLeave={closeMega}>
+                <div className="mega-panel" role="group" aria-label="Collections menu" onMouseEnter={openMega} onMouseLeave={closeMega} onKeyDown={(e) => { if (e.key === 'Escape') setMegaOpen(false); }}>
                   <MegaMenu onNavigate={() => setMegaOpen(false)} />
                 </div>
               )}
@@ -203,6 +193,7 @@ export default function Layout() {
                 name="q"
                 placeholder="Search rugs, fibres, rooms…"
                 aria-label="Search rugs"
+                onKeyDown={(e) => { if (e.key === 'Escape') { setSearchOpen(false); if (searchRef.current) searchRef.current.value = ''; } }}
                 onBlur={() => { if (!searchRef.current?.value) setSearchOpen(false); }}
               />
               {searchOpen && (
