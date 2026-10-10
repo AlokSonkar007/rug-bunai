@@ -181,10 +181,10 @@ export const DEFAULT_CONTENT: SiteContent = {
     {
       heading: 'Support',
       links: [
-        { label: 'Shipping Policy', to: '/policies/shipping' },
+        { label: 'Shipping Policy', to: '/policies/shipping-policy' },
         { label: 'Returns & Exchange', to: '/policies/returns' },
         { label: 'Care Guide', to: '/journal/rug-size-guide' },
-        { label: 'Privacy Policy', to: '/policies/privacy' },
+        { label: 'Privacy Policy', to: '/policies/privacy-policy' },
       ],
     },
   ],

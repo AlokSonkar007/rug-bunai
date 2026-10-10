@@ -7,10 +7,22 @@ import { CONTACT_PHONE_DISPLAY, WHATSAPP_TEL_HREF, whatsappLink } from '../lib/s
  * FAQs. Routed at /policies/:slug and cross-linked from the footer.
  */
 
-type Section = { heading: string; body: string[] };
+type Section = { heading: string; body: string[]; kind?: 'timelines' };
 type PolicyDoc = { eyebrow: string; title: string; updated: string; intro: string; sections: Section[] };
 
 const UPDATED = 'Last updated: 10 October 2026';
+
+/** Business-supplied production & delivery windows. Production time is shown
+ * separately from post-dispatch delivery time and never as a combined promise. */
+const PRODUCTION_TIMELINES = [
+  { label: 'Hand-Tufted Rugs', value: '10 to 12 working days for production' },
+  { label: 'Hand-Knotted Rugs', value: '30 to 35 working days for production' },
+  { label: 'Dhurrie', value: '15 to 20 working days for production' },
+];
+const DELIVERY_TIMELINES = [
+  { label: 'Standard Delivery', value: '5 to 7 working days from dispatch' },
+  { label: 'Express Delivery', value: '2 to 4 working days from dispatch' },
+];
 
 const POLICIES: Record<string, PolicyDoc> = {
   /**
@@ -19,7 +31,7 @@ const POLICIES: Record<string, PolicyDoc> = {
    * consent or notification workflows that are not actually implemented
    * in this application.
    */
-  privacy: {
+  'privacy-policy': {
     eyebrow: 'Legal',
     title: 'Privacy Policy',
     updated: UPDATED,
@@ -169,39 +181,40 @@ const POLICIES: Record<string, PolicyDoc> = {
       },
     ],
   },
-  shipping: {
+  /**
+   * Shipping Policy content mirrors the business-approved draft exactly.
+   * Production timelines are deliberately kept separate from post-dispatch
+   * delivery windows — they must never read as a combined guaranteed date.
+   */
+  'shipping-policy': {
     eyebrow: 'Storefront policy',
     title: 'Shipping Policy',
     updated: UPDATED,
-    intro: 'How your rug travels from the loom town of Bhadohi to your floor.',
+    intro: 'How your Rug Bunai order moves from our workshop in Bhadohi to your floor — production timelines, tracking updates, pricing and support.',
     sections: [
       {
-        heading: 'Dispatch times',
+        heading: '1. Production & Delivery Timelines',
         body: [
-          'In-stock pieces are dispatched within 3–5 working days after payment confirmation, following a final wash and finish check.',
-          'Made-to-order and custom-size rugs ship per the production window quoted at the time of order (typically 6–14 weeks for hand-knotted commissions).',
+          'Production time and delivery time are separate stages. Your rug is first handmade to order; only after it passes quality checks and is dispatched does the delivery window begin. The durations below are working-day estimates, not guaranteed combined delivery dates.',
+        ],
+        kind: 'timelines',
+      },
+      {
+        heading: '2. Order Updates & Tracking',
+        body: [
+          'Order Confirmation: an order confirmation is sent via email and WhatsApp.',
+          'Tracking Information: the tracking ID is sent via WhatsApp and email once the order has shipped.',
+          'Quality Assurance: each order undergoes quality assurance before dispatch.',
+          'Returns: a 7-day return policy applies.',
         ],
       },
       {
-        heading: 'Within India',
+        heading: '3. Pricing & Support',
         body: [
-          'Free insured shipping across India on all orders. Large rugs travel by surface freight with door-step delivery; smaller runners may travel by express courier.',
-          'Delivery takes 5–10 working days from dispatch depending on pin code. Remote northeast and island locations can take longer.',
-          'Every shipment is fully insured against loss and transit damage until it is signed for at your address.',
-        ],
-      },
-      {
-        heading: 'International shipping',
-        body: [
-          'We ship worldwide on request. Message the atelier on WhatsApp for a freight quote to your country.',
-          'International orders ship DDU (duties and taxes payable by recipient) unless otherwise agreed in the proforma.',
-        ],
-      },
-      {
-        heading: 'Receiving your rug',
-        body: [
-          'Please inspect the package before signing the delivery challan. Note any visible damage on the challan and photograph the parcel before opening — claims filed without this evidence are difficult to honour.',
-          'Roll (do not fold) the rug for storage, and unroll it flat on arrival; gentle creases settle within two weeks.',
+          'Domestic Orders: all-inclusive pricing; applicable taxes are included.',
+          'International Orders: shipping fees apply, and the buyer is responsible for import duties and customs charges.',
+          `Customer Support: ${CONTACT_PHONE_DISPLAY}.`,
+          'Support Hours: 10:00 AM–6:00 PM, Monday–Saturday, excluding national holidays.',
         ],
       },
     ],
@@ -278,6 +291,45 @@ const POLICIES: Record<string, PolicyDoc> = {
   },
 };
 
+/** Renders "Label: rest" copy with a semantically bolded lead-in label. */
+function PolicyParagraph({ text }: { text: string }) {
+  const m = text.match(/^([A-Z][^:.]{1,42}):\s(.+)$/s);
+  if (!m) return <p className="muted">{text}</p>;
+  return (
+    <p className="muted">
+      <strong>{m[1]}:</strong> {m[2]}
+    </p>
+  );
+}
+
+function TimelineTable() {
+  return (
+    <div className="policy-timeline">
+      <table>
+        <caption className="sr-only">Production and delivery timelines in working days</caption>
+        <thead>
+          <tr>
+            <th scope="col">Product or delivery method</th>
+            <th scope="col">Timeline</th>
+          </tr>
+        </thead>
+        <tbody>
+          {[...PRODUCTION_TIMELINES, ...DELIVERY_TIMELINES].map((row) => (
+            <tr key={row.label}>
+              <th scope="row">{row.label}</th>
+              <td>{row.value}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="muted policy-timeline-note">
+        Production time applies before dispatch; delivery time begins only after the order ships. These are working-day
+        estimates, not a guaranteed combined delivery date.
+      </p>
+    </div>
+  );
+}
+
 export default function PolicyPage() {
   const { slug } = useParams();
   const doc = slug ? POLICIES[slug] : undefined;
@@ -298,28 +350,31 @@ export default function PolicyPage() {
   }
 
   return (
-    <article className="wrap section" style={{ maxWidth: '74ch' }}>
-      <p className="eyebrow">{doc.eyebrow}</p>
-      <h1 className="display" style={{ margin: '10px 0 6px' }}>{doc.title}</h1>
-      <p className="muted" style={{ fontSize: '0.78rem', letterSpacing: '0.12em', textTransform: 'uppercase' }}>{doc.updated}</p>
-      <p className="muted" style={{ marginTop: 22 }}>{doc.intro}</p>
+    <article className="wrap section policy-page">
+      <header className="policy-head">
+        <p className="eyebrow">{doc.eyebrow}</p>
+        <h1 className="display">{doc.title}</h1>
+        <p className="policy-updated">{doc.updated}</p>
+        <p className="muted policy-intro">{doc.intro}</p>
+      </header>
 
       {doc.sections.map((section) => (
-        <section key={section.heading} style={{ marginTop: 36 }}>
-          <h2 className="subhead" style={{ fontSize: '1.15rem', marginBottom: 10 }}>{section.heading}</h2>
+        <section key={section.heading} className="policy-section" aria-labelledby={`sec-${section.heading.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`}>
+          <h2 id={`sec-${section.heading.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`} className="subhead">{section.heading}</h2>
+          {section.kind === 'timelines' && <TimelineTable />}
           {section.body.map((paragraph) => (
-            <p key={paragraph} className="muted" style={{ marginBottom: 10 }}>{paragraph}</p>
+            <PolicyParagraph key={paragraph} text={paragraph} />
           ))}
         </section>
       ))}
 
-      <hr className="rule" style={{ margin: '48px 0 26px' }} />
-      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+      <hr className="rule" />
+      <div className="policy-actions">
         <a className="btn btn-solid" href={whatsappLink(`Hello Rug Bunai! I have a question about your ${doc.title.toLowerCase()}.`)} target="_blank" rel="noopener noreferrer">Ask on WhatsApp</a>
         <a className="btn" href={WHATSAPP_TEL_HREF}>Call {CONTACT_PHONE_DISPLAY}</a>
         <Link className="btn" to="/rugs">Browse the archive</Link>
       </div>
-      <p className="muted" style={{ marginTop: 26, fontSize: '0.8rem' }}>
+      <p className="policy-crosslinks muted">
         Other policies:{' '}
         {Object.entries(POLICIES).filter(([key]) => key !== slug).map(([key, value], i, arr) => (
           <span key={key}>

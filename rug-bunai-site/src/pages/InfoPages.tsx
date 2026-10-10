@@ -30,9 +30,9 @@ export default function ContactPage() {
       <hr className="rule" style={{ margin: '44px 0 26px' }} />
       <p className="muted" style={{ fontSize: '0.8rem' }}>
         Before you buy, our storefront policies are published for your peace of mind:{' '}
-        <Link to="/policies/privacy" className="clear-all">Privacy Policy</Link>,{' '}
+        <Link to="/policies/privacy-policy" className="clear-all">Privacy Policy</Link>,{' '}
         <Link to="/policies/terms" className="clear-all">Terms of Sale</Link>,{' '}
-        <Link to="/policies/shipping" className="clear-all">Shipping</Link>,{' '}
+        <Link to="/policies/shipping-policy" className="clear-all">Shipping Policy</Link>,{' '}
         <Link to="/policies/returns" className="clear-all">Returns &amp; Refunds</Link> and{' '}
         <Link to="/policies/faqs" className="clear-all">FAQs</Link>.
       </p>
