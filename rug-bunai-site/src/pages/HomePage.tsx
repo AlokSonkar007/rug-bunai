@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { getProduct } from '../data/products';
 import { ROOMS } from '../data/vocabularies';
 import { rugImage } from '../lib/rugArt';
+import { homeProductImage } from '../lib/images';
 import { Reveal } from '../components/ProductCard';
 import Carousel from '../components/Carousel';
 import ProductRail from '../components/ProductRail';
@@ -59,7 +60,7 @@ export default function HomePage() {
             <div className="hero-slide" key={i}>
               <div className="hero-art" aria-hidden={i !== 0}>
                 <img
-                  src={s.imageUrl ?? rugImage(seedProduct(s.productSlug, i, products) as never, 4, 1600, 900)}
+                  src={s.imageUrl ?? homeProductImage(products.find((p) => p.slug === s.productSlug) ?? (products[i % products.length] as never), 4, 1600, 900)}
                   alt="" loading={i === 0 ? 'eager' : 'lazy'}
                 />
               </div>
@@ -99,7 +100,7 @@ export default function HomePage() {
             <Link to={content.newArrivalsRail.linkTo} className="clear-all">{content.newArrivalsRail.linkLabel}</Link>
           </div>
         </Reveal>
-        <ProductRail products={newArrivals} />
+        <ProductRail products={newArrivals} imageMode="homepage" />
       </section>
 
       {/* Axis 1: Technique & Material */}
@@ -157,7 +158,7 @@ export default function HomePage() {
             <Link to={content.bestSellersRail.linkTo} className="clear-all">{content.bestSellersRail.linkLabel}</Link>
           </div>
         </Reveal>
-        <ProductRail products={bestSellers} />
+        <ProductRail products={bestSellers} imageMode="homepage" />
       </section>
 
       {/* Axis 2: Room & Use Case */}

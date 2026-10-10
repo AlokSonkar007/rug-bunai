@@ -9,6 +9,8 @@ import { dedupeColourOptions, isValidHex, type ProductColourOption } from './col
 
 export type CatalogProduct = Product & {
   imageUrl?: string | null;
+  /** Homepage-only photo override set in Studio > Homepage Products. */
+  homeImageUrl?: string | null;
   isManaged?: boolean;
   managedId?: string;
 };
@@ -231,6 +233,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
         ...textRest,
         ...(specPatch ? { specs: { ...product.specs, ...specPatch } } : {}),
         imageUrl: ov.imageUrl !== undefined ? ov.imageUrl : product.imageUrl,
+        homeImageUrl: ov.homeImageUrl ?? null,
       };
     });
     return merged.filter((product) => !productOverrides[product.slug]?.hidden);

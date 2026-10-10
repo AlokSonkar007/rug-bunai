@@ -618,6 +618,7 @@ function HomepageContentEditor({ onUpload }: { onUpload: (f: File) => Promise<st
       <SplitBlockEditor which="inspirationSplit" idPrefix="inspiration-split" onUpload={onUpload} />
       <BandEditor path="colourBand" idPrefix="colour-band" labels={{ heading: 'Shop by Colour section', eyebrow: 'Eyebrow', title: 'Title', sub: 'Supporting text' }} />
       <BandEditor path="newsletter" idPrefix="newsletter" labels={{ heading: 'Newsletter section', eyebrow: 'Eyebrow', title: 'Title', note: 'Note' }} />
+      <HomepageProductsEditor onUpload={onUpload} />
     </div>
   );
 }
@@ -660,6 +661,66 @@ function ProductsContentTab() {
       ) : (
         <p className="muted">Select a product to edit its page content.</p>
       )}
+    </div>
+  );
+}
+
+/** Homepage Products — photo control for the products actually shown on the
+ *  public homepage (New arrivals / Best sellers rails + hero slideshow). Saves
+ *  a homepage-only override; the catalogue & product-page image stays untouched. */
+function HomepageProductsEditor({ onUpload }: { onUpload: (file: File) => Promise<string> }) {
+  const { products } = useCatalog();
+  const { content, saveProductHomeImage } = useSiteContent();
+
+  const bestSellers = products.filter((p) => p.bestSellerRank).slice(0, 6);
+  const newArrivals = [...products].sort((a, b) => a.addedDaysAgo - b.addedDaysAgo).slice(0, 6);
+  // Hero slides seed from a product when no direct hero image is uploaded —
+  // badge those rugs so admins know the photo also feeds the slideshow.
+  const heroSlugs = new Set(content.heroSlides.filter((s) => !s.imageUrl).map((s) => s.productSlug));
+
+  const sections: Array<{ title: string; list: typeof products }> = [
+    { title: 'New arrivals rail', list: newArrivals },
+    { title: 'Best sellers rail', list: bestSellers },
+  ];
+
+  return (
+    <div className="summary-card" style={{ padding: 18 }}>
+      <h3 className="subhead" style={{ marginBottom: 6 }}>Homepage Products</h3>
+      <p className="muted" style={{ fontSize: '0.8rem', marginBottom: 14 }}>
+        Change the photo a rug shows on the homepage without affecting its product page or catalogue image.
+      </p>
+      {sections.map((section) => (
+        <div key={section.title} className="home-products-group">
+          <h4 className="home-products-heading">{section.title}</h4>
+          <ul className="home-products-list">
+            {section.list.map((p) => (
+              <li key={`${section.title}-${p.id}`} className="home-product-row">
+                <img
+                  src={p.homeImageUrl || p.imageUrl || 'https://placehold.co/96x72?text=Rug'}
+                  alt="" width={72} height={54}
+                  style={{ objectFit: 'cover', borderRadius: 6, border: '1px solid var(--line)', background: '#e9e1d6' }}
+                />
+                <div className="home-product-info">
+                  <b>{p.name}</b>
+                  <span className="card-meta">/{p.slug}{heroSlugs.has(p.slug) ? ' · also in hero slideshow' : ''}</span>
+                  {p.homeImageUrl
+                    ? <span className="tag" style={{ alignSelf: 'flex-start' }}>Custom homepage photo</span>
+                    : <span className="muted" style={{ fontSize: '0.74rem' }}>Using catalogue photo</span>}
+                </div>
+                <ImageEditor
+                  idPrefix={`home-img-${section.title.replace(/\W+/g, '-')}-${p.slug}`}
+                  label="Change Photo"
+                  currentUrl={p.homeImageUrl ?? null}
+                  fallbackSrc={p.imageUrl ?? undefined}
+                  note="Uploaded images replace the homepage photo only. Remove to restore the catalogue image."
+                  onUpload={onUpload}
+                  onSave={async (url) => { await saveProductHomeImage(p.slug, url); }}
+                />
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
     </div>
   );
 }
@@ -782,10 +843,12 @@ export default function AdminPage() {
   };
 
   return (
-    <div className="wrap section">
-      <p className="eyebrow">Rug Bunai studio</p>
-      <h1 className="display" style={{ marginTop: 10 }}>Studio &amp; website content</h1>
-      <p className="muted" style={{ marginTop: 12 }}>Manage the catalogue and edit the text &amp; images shown across the public website. Changes save to Supabase and appear for every visitor.</p>
+    <div className="wrap section studio">
+      <div className="studio-heading">
+        <p className="eyebrow">Rug Bunai studio</p>
+        <h1 className="display" style={{ marginTop: 10 }}>Studio &amp; website content</h1>
+        <p className="muted" style={{ marginTop: 12 }}>Manage the catalogue and edit the text &amp; images shown across the public website. Changes save to Supabase and appear for every visitor.</p>
+      </div>
 
       <div role="tablist" aria-label="Studio sections" className="studio-tabs">
         {([
@@ -802,7 +865,7 @@ export default function AdminPage() {
       </div>
 
       {tab === 'products' && (
-      <div>
+      <div className="studio-panel">
       <form onSubmit={addProduct} className="summary-card" style={{ marginTop: 30, maxWidth: 760 }}>
         <h2 className="subhead" style={{ marginBottom: 18 }}>Add a product</h2>
         <div className="form-grid-2">
@@ -827,7 +890,7 @@ export default function AdminPage() {
         <div style={{ display: 'grid', gap: 12, marginTop: 22 }}>
           {products.map((product) => (
             <article key={product.id} className="summary-card" style={{ display: 'block', padding: 14 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '88px 1fr auto', gap: 18, alignItems: 'center' }}>
+              <div className="studio-product-grid">
                 <img src={product.imageUrl || 'https://placehold.co/176x132?text=Rug'} alt="" width={88} height={66} style={{ objectFit: 'cover', background: '#e9e1d6' }} />
                 <div>
                   <h3 className="subhead">{product.name}</h3>
@@ -868,10 +931,10 @@ export default function AdminPage() {
       </div>
       )}
 
-      {tab === 'homepage' && <div style={{ marginTop: 30 }}><HomepageContentEditor onUpload={uploadProductPhoto} /></div>}
-      {tab === 'collections' && <div style={{ marginTop: 30 }}><CollectionsEditor onUpload={uploadProductPhoto} /></div>}
-      {tab === 'product-content' && <div style={{ marginTop: 30 }}><ProductsContentTab /></div>}
-      {tab === 'shared' && <div style={{ marginTop: 30 }}><SharedContentEditor /></div>}
+      {tab === 'homepage' && <div className="studio-panel" style={{ marginTop: 30 }}><HomepageContentEditor onUpload={uploadProductPhoto} /></div>}
+      {tab === 'collections' && <div className="studio-panel" style={{ marginTop: 30 }}><CollectionsEditor onUpload={uploadProductPhoto} /></div>}
+      {tab === 'product-content' && <div className="studio-panel" style={{ marginTop: 30 }}><ProductsContentTab /></div>}
+      {tab === 'shared' && <div className="studio-panel" style={{ marginTop: 30 }}><SharedContentEditor /></div>}
     </div>
   );
 }

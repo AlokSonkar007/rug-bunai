@@ -1084,6 +1084,47 @@ main { flex: 1; }
 /* Studio content-management tabs */
 .studio-tabs { display: flex; gap: 18px; flex-wrap: wrap; border-bottom: 1px solid var(--line); margin-top: 26px; }
 
+/* ── Studio (Rug Bunai admin) layout fixes ───────────────────────────────
+   Root cause of the stretched, floating panels: .summary-card is sticky for
+   the cart/checkout order summary, but Studio reuses the same class for every
+   editor panel and product row — inside a long scrolling page those cards
+   detached and stuck under the header. Un-stick them within .studio only. */
+.studio .summary-card { position: static; }
+
+/* Consistent, centred content measure so forms and lists stop stretching
+   across the full viewport with large unused side areas. */
+.studio .studio-panel { max-width: 980px; margin-inline: auto; }
+.studio .studio-heading p.muted { max-width: 640px; }
+
+/* Studio tabs: scroll horizontally on narrow screens instead of wrapping
+   into uneven rows; consistent spacing; active tab clearly distinguished. */
+@media (max-width: 720px) {
+  .studio-tabs { flex-wrap: nowrap; overflow-x: auto; gap: 14px; padding-bottom: 2px; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
+}
+
+/* Homepage Products editor (Studio → Homepage tab). */
+.home-products-group { margin-top: 18px; }
+.home-products-heading { font-family: var(--serif); font-size: 1rem; margin: 0 0 10px; }
+.home-products-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.home-product-row {
+  display: grid; grid-template-columns: 72px minmax(0, 1fr) minmax(220px, 340px);
+  gap: 16px; align-items: center;
+  background: var(--paper, #fff); border: 1px solid var(--line); border-radius: 10px;
+  padding: 12px 14px;
+}
+.home-product-row img { width: 72px; height: 54px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); background: #e9e1d6; }
+.home-product-info { display: grid; gap: 3px; min-width: 0; }
+.home-product-info b { overflow-wrap: anywhere; }
+.home-product-info .card-meta { overflow-wrap: anywhere; }
+.home-product-row .field { margin-bottom: 0; }
+.home-product-row .field input[type='file'] { max-width: 100%; font-size: 0.78rem; }
+@media (max-width: 720px) {
+  .home-product-row { grid-template-columns: 64px minmax(0, 1fr); }
+  .home-product-row img { width: 64px; height: 48px; }
+  /* Keep the upload control attached to its own product, below its info. */
+  .home-product-row > .field { grid-column: 1 / -1; border-top: 1px dashed var(--line); padding-top: 10px; }
+}
+
 /* Privacy/policy pages: keep the fixed WhatsApp FAB clear of the page-end actions on small screens. */
 .policy-page { padding-bottom: clamp(120px, 16vw, 160px); }
 
@@ -1123,4 +1164,15 @@ main { flex: 1; }
 }
 @media (min-width: 561px) and (max-width: 900px) {
   .policy-timeline { overflow-x: auto; }
+}
+
+/* Studio product rows: thumbnail + info + actions stay visually connected.
+   Desktop = structured row; mobile = stacked, readable arrangement. */
+.studio-product-grid { display: grid; grid-template-columns: 88px minmax(0, 1fr) auto; gap: 18px; align-items: center; }
+.studio-product-grid > div:last-child { justify-self: end; }
+@media (max-width: 720px) {
+  .studio-product-grid { grid-template-columns: 64px minmax(0, 1fr); }
+  .studio-product-grid > img { width: 64px; height: 48px; }
+  /* Action buttons move below the info, full width, comfortable touch targets. */
+  .studio-product-grid > div:last-child { grid-column: 1 / -1; justify-self: stretch; border-top: 1px solid var(--line); padding-top: 10px; }
 }
