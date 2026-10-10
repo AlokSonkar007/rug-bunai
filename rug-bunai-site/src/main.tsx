@@ -12,7 +12,9 @@ import { CartPage, CheckoutPage } from './pages/CartPages';
 import { LoginPage } from './pages/AuthPages';
 import WishlistPage from './pages/WishlistPage';
 import AdminPage from './pages/AdminPage';
+import { PolicyPage } from './pages/PolicyPages';
 import { AuthProvider } from './lib/auth';
+import { SiteContentProvider } from './lib/siteContent';
 import { CatalogProvider } from './lib/catalog';
 import { CartProvider } from './lib/cart';
 import { WishlistProvider } from './lib/wishlist';
@@ -36,6 +38,7 @@ const router = createBrowserRouter([
       { path: 'admin/login', element: <LoginPage adminOnly /> },
       { path: 'admin', element: <AdminPage /> },
       { path: 'contact', element: <ContactPage /> },
+      { path: 'policies/:slug', element: <PolicyPage /> },
       { path: '*', element: <NotFound /> },
     ],
   },
@@ -44,13 +47,15 @@ const router = createBrowserRouter([
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AuthProvider>
-      <CatalogProvider>
-        <CartProvider>
-          <WishlistProvider>
-            <RouterProvider router={router} />
-          </WishlistProvider>
-        </CartProvider>
-      </CatalogProvider>
+      <SiteContentProvider>
+        <CatalogProvider>
+          <CartProvider>
+            <WishlistProvider>
+              <RouterProvider router={router} />
+            </WishlistProvider>
+          </CartProvider>
+        </CatalogProvider>
+      </SiteContentProvider>
     </AuthProvider>
   </StrictMode>,
 );

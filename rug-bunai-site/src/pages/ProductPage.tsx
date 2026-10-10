@@ -4,6 +4,7 @@ import { formatINR } from '../data/products';
 import { CLASSIFICATIONS, colorHex, findTerm, MATERIALS, TECHNIQUES } from '../data/vocabularies';
 import { productImage } from '../lib/images';
 import { useCatalog } from '../lib/catalog';
+import { useSiteContent } from '../lib/siteContent';
 import { useWishlist } from '../lib/wishlist';
 import { useCart } from '../lib/cart';
 import { ProductCard, Reveal } from '../components/ProductCard';
@@ -17,6 +18,7 @@ export default function ProductPage() {
   const { slug } = useParams();
   const { products } = useCatalog();
   const { has, toggle } = useWishlist();
+  const { content } = useSiteContent();
   const product = products.find((candidate) => candidate.slug === (slug ?? ''));
   const [angle, setAngle] = useState(0);
   const [zoom, setZoom] = useState(false);
@@ -177,9 +179,9 @@ export default function ProductPage() {
 
           <hr className="rule" style={{ margin: '34px 0' }} />
 
-          {/* Tabs: Specifications / Craft story / Care */}
+          {/* Tabs: Specifications / Craft story / Care — labels editable in Studio */}
           <div className="tabs" role="tablist">
-            {([['details', 'Specifications'], ['craft', 'Craft Story'], ['care', 'Care']] as const).map(([k, label]) => (
+            {([['details', content.productTabs.details], ['craft', content.productTabs.craft], ['care', content.productTabs.care]] as const).map(([k, label]) => (
               <button key={k} role="tab" aria-selected={tab === k} className={`tab ${tab === k ? 'active' : ''}`} onClick={() => setTab(k)}>
                 {label}
               </button>
