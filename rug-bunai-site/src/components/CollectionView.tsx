@@ -7,6 +7,7 @@ import {
 } from '../lib/search';
 import { ProductCard, Reveal } from './ProductCard';
 import { useCatalog } from '../lib/catalog';
+import { useSiteContent } from '../lib/siteContent';
 
 /** One facet group: multi-select checkboxes, dynamic counts, progressive disclosure. */
 function FacetBlock({
@@ -116,6 +117,7 @@ export default function CollectionView({ categoryPath }: { categoryPath?: string
   const [sheetOpen, setSheetOpen] = useState(false);
   const navigate = useNavigate();
   const { products } = useCatalog();
+  const { content: siteContent } = useSiteContent();
 
   const baseState = useMemo<FacetState>(() => facetsFromSearch(sp), [sp]);
   // Category acts as an additional fixed technique/material/room constraint.
@@ -144,10 +146,15 @@ export default function CollectionView({ categoryPath }: { categoryPath?: string
 
   const update = (next: FacetState) => setSp(facetsToSearch(next), { replace: false });
 
-  const title = (categoryPath && categoryTitle(categoryPath)) || 'The Collection';
-  const intro = categoryPath
-    ? 'Every piece below is knotted, tufted or woven by hand in our Bhadohi workshops — filter to narrow by what matters to your room.'
-    : 'Browse the full archive of designs. Combine filters freely — counts update live so you never reach a dead end.';
+  // Admin-editable collection intro (Studio > Collections). Keyed by the
+  // curated category slug so editing one collection never touches another.
+  const curatedSlug = categoryPath?.startsWith('rugs/category/') ? categoryPath.split('/').slice(2).join('-') : undefined;
+  const collectionCopy = curatedSlug ? siteContent.collections[curatedSlug] : undefined;
+  const title = (collectionCopy?.title || (categoryPath && categoryTitle(categoryPath))) || 'The Collection';
+  const intro = collectionCopy?.description
+    || (categoryPath
+      ? 'Every piece below is knotted, tufted or woven by hand in our Bhadohi workshops — filter to narrow by what matters to your room.'
+      : 'Browse the full archive of designs. Combine filters freely — counts update live so you never reach a dead end.');
   // On a dedicated collection route, "clearing" means leaving the category
   // constraint too — reset straight back to the full catalogue.
   const resetFilters = () => (categoryPath ? navigate('/rugs') : update(EMPTY_FACETS));
@@ -158,6 +165,14 @@ export default function CollectionView({ categoryPath }: { categoryPath?: string
         <p className="eyebrow">{categoryPath ? 'Collection' : 'All Rugs'}</p>
         <h1 className="display" style={{ marginTop: 10 }}>{title}</h1>
         <p className="muted" style={{ maxWidth: '58ch', marginTop: 14 }}>{intro}</p>
+        {collectionCopy?.imageUrl && (
+          <img
+            src={collectionCopy.imageUrl}
+            alt=""
+            loading="lazy"
+            style={{ display: 'block', width: '100%', maxHeight: 320, objectFit: 'cover', borderRadius: 14, marginTop: 22 }}
+          />
+        )}
       </header>
 
       <div className="plp">

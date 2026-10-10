@@ -1,16 +1,14 @@
 import { Link } from 'react-router-dom';
-import { CONTACT_PHONE_DISPLAY, WHATSAPP_TEL_HREF, whatsappLink } from '../lib/siteContent';
+import { CONTACT_PHONE_DISPLAY, WHATSAPP_TEL_HREF, useSiteContent, whatsappLink } from '../lib/siteContent';
 
 /** Minimal contact page — footer links to /contact; details per brand spec. */
 export default function ContactPage() {
+  const { content } = useSiteContent();
   return (
     <div className="wrap section" style={{ maxWidth: '60ch' }}>
       <p className="eyebrow">Contact</p>
-      <h1 className="display" style={{ margin: '10px 0 24px' }}>Speak with the atelier.</h1>
-      <p className="muted">
-        For sizing counsel, trade enquiries or provenance questions, write to us or call the studio
-        directly. We answer within one working day, Bhadohi time.
-      </p>
+      <h1 className="display" style={{ margin: '10px 0 24px' }}>{content.contact.title}</h1>
+      <p className="muted">{content.contact.body}</p>
       <ul style={{ listStyle: 'none', padding: 0, marginTop: 28, display: 'grid', gap: 12 }}>
         <li>
           <span className="subhead" style={{ fontSize: '1rem' }}>Telephone</span><br />
@@ -24,6 +22,7 @@ export default function ContactPage() {
         </li>
         <li><span className="subhead" style={{ fontSize: '1rem' }}>Studio</span><br />Bhadohi, Uttar Pradesh, India — 221401</li>
       </ul>
+      <p className="muted" style={{ marginTop: 18, fontSize: '0.85rem' }}>{content.contact.note}</p>
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 30 }}>
         <Link to="/rugs" className="btn btn-solid">Explore the Archive</Link>
         <a className="btn" href={WHATSAPP_TEL_HREF}>Call the atelier</a>

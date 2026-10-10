@@ -224,9 +224,12 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     const merged = remoteProducts.map((product) => {
       const ov = productOverrides[product.slug];
       if (!ov) return product;
+      // Merge (never replace) `specs` so a care-copy edit can't wipe numeric specs.
+      const { specs: specPatch, ...textRest } = ov.text ?? {};
       return {
         ...product,
-        ...(ov.text ?? {}),
+        ...textRest,
+        ...(specPatch ? { specs: { ...product.specs, ...specPatch } } : {}),
         imageUrl: ov.imageUrl !== undefined ? ov.imageUrl : product.imageUrl,
       };
     });

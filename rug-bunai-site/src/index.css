@@ -1080,3 +1080,6 @@ main { flex: 1; }
   .pdp-custom-row { flex-wrap: wrap; }
   .colour-editor-list li { flex-wrap: wrap; }
 }
+
+/* Studio content-management tabs */
+.studio-tabs { display: flex; gap: 18px; flex-wrap: wrap; border-bottom: 1px solid var(--line); margin-top: 26px; }

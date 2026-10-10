@@ -43,6 +43,13 @@ export interface SplitBlockContent {
 export interface RailContent { eyebrow: string; title: string; linkLabel: string; linkTo: string; }
 export interface RoomTileContent extends TileContent { countSuffix: string; }
 
+/** Editable intro copy for a curated collection page (keyed by category slug). */
+export interface CollectionContent { title: string; description: string; imageUrl: string | null; }
+
+/** Shared, customer-facing text rendered outside the homepage sections. */
+export interface FooterColumnContent { heading: string; links: Array<{ label: string; to: string }>; }
+export interface ContactContent { title: string; body: string; note: string; }
+
 export interface SiteContent {
   topbar: string;
   heroSlides: HeroSlideContent[];
@@ -58,6 +65,11 @@ export interface SiteContent {
   colourBand: { eyebrow: string; title: string; sub: string };
   newsletter: { eyebrow: string; title: string; note: string };
   footer: { about: string; phone: string };
+  /** Per-collection intro copy, keyed by curated category slug. */
+  collections: Record<string, CollectionContent>;
+  /** Shared website content (announcement bar is `topbar`; footer columns; contact page). */
+  footerColumns: FooterColumnContent[];
+  contact: ContactContent;
 }
 
 // ── Defaults (current live copy) ──────────────────────────────────────────────
@@ -145,6 +157,42 @@ export const DEFAULT_CONTENT: SiteContent = {
     about: 'Guardians of a weaving tradition older than any single family — each rug knotted, washed and finished by hand in Uttar Pradesh.',
     phone: CONTACT_PHONE_DISPLAY,
   },
+  collections: {},
+  footerColumns: [
+    {
+      heading: 'Collections',
+      links: [
+        { label: 'Hand-Knotted Rugs', to: '/rugs?tech=hand-knotted' },
+        { label: 'Shaggy Carpets', to: '/collections/shaggy-carpets' },
+        { label: 'Floral Carpets', to: '/collections/floral-carpets' },
+        { label: 'Geometrical Carpets', to: '/collections/geometrical-carpets' },
+        { label: 'All Rugs', to: '/rugs' },
+      ],
+    },
+    {
+      heading: 'The House',
+      links: [
+        { label: 'Craft Story', to: '/story' },
+        { label: 'Journal', to: '/journal' },
+        { label: 'Contact', to: '/contact' },
+        { label: 'Wishlist', to: '/wishlist' },
+      ],
+    },
+    {
+      heading: 'Support',
+      links: [
+        { label: 'Shipping Policy', to: '/policies/shipping' },
+        { label: 'Returns & Exchange', to: '/policies/returns' },
+        { label: 'Care Guide', to: '/journal/rug-size-guide' },
+        { label: 'Privacy Policy', to: '/policies/privacy' },
+      ],
+    },
+  ],
+  contact: {
+    title: 'Speak with the atelier.',
+    body: 'Tell us the room, the size and the shade you are chasing — a weaver or designer replies personally, usually within one working day.',
+    note: 'Wholesale, hospitality and bespoke loom orders welcome.',
+  },
 };
 
 // ── Deep merge (arrays replace wholesale; objects recurse) ───────────────────
@@ -170,7 +218,13 @@ function deepMerge<T>(base: T, patch: unknown): T {
 const LS_KEY = 'rugbunai-site-content-v1';
 const LS_OVERRIDES = 'rugbunai-product-overrides-v1';
 
-export type TextOverride = Partial<Pick<Product, 'name' | 'tagline' | 'description' | 'craftStory' | 'colorSlugs' | 'colourOptions'>>;
+/**
+ * Editable product text. `specs` patches only the copy fields inside the
+ * specifications object (care instructions) — numeric business attributes
+ * like pile height or knot density are never touched by content edits.
+ */
+export type TextOverride = Partial<Pick<Product, 'name' | 'tagline' | 'description' | 'craftStory' | 'colorSlugs' | 'colourOptions'>>
+  & { specs?: { careInstructions?: string } };
 export type ProductOverrideMap = Record<string, { text?: TextOverride; imageUrl?: string | null; hidden?: boolean }>;
 
 function readLS<T>(key: string, fallback: T): T {
@@ -189,7 +243,10 @@ type SiteContentCtx = {
   /** Admin-only: full catalogue including hidden entries, with text/image overrides applied. */
   productOverrides: ProductOverrideMap;
   saveContent: (patch: Partial<SiteContent>) => Promise<void>;
+  saveCollectionContent: (categorySlug: string, patch: Partial<CollectionContent>) => Promise<void>;
   saveProductText: (slugKey: string, text: TextOverride) => Promise<void>;
+  /** Edit just the Care-instructions copy of a product. */
+  saveProductCare: (slugKey: string, careInstructions: string) => Promise<void>;
   saveProductImage: (slugKey: string, url: string | null) => Promise<void>;
   saveProductHidden: (slugKey: string, hidden: boolean) => Promise<void>;
   resetAll: () => Promise<void>;
@@ -225,23 +282,23 @@ export function SiteContentProvider({ children }: { children: ReactNode }) {
   const persist = useCallback(async (next: SiteContent, overrides: ProductOverrideMap) => {
     setSaving(true);
     try {
+      if (supabase) {
+        // Shared persistence first — a failed write must NOT look like success.
+        const payload = { ...next, productOverrides: overrides };
+        const existing = await supabase.from('site_content').select('id').eq('id', 1).maybeSingle();
+        if (existing.error) throw new Error(`Could not read saved content: ${existing.error.message}`);
+        const { error } = existing.data
+          ? await supabase.from('site_content')
+              .update({ data: payload, updated_at: new Date().toISOString() }).eq('id', 1)
+          : await supabase.from('site_content').insert({ id: 1, data: payload });
+        if (error) throw new Error(`Could not save content: ${error.message}`);
+      }
+      // Local mirror only after a successful remote write (or when Supabase is
+      // not configured at all — then the browser is the only available store).
       localStorage.setItem(LS_KEY, JSON.stringify(next));
       localStorage.setItem(LS_OVERRIDES, JSON.stringify(overrides));
       setContent(next);
       setProductOverrides(overrides);
-      if (supabase) {
-        const payload = { ...next, productOverrides: overrides };
-        const existing = await supabase.from('site_content').select('id').eq('id', 1).maybeSingle();
-        if (existing.data) {
-          const { error } = await supabase.from('site_content')
-            .update({ data: payload, updated_at: new Date().toISOString() }).eq('id', 1);
-          if (error) console.warn('site_content update failed', error.message);
-        } else {
-          const { error } = await supabase.from('site_content')
-            .insert({ id: 1, data: payload });
-          if (error) console.warn('site_content insert failed', error.message);
-        }
-      }
     } finally {
       setSaving(false);
     }
@@ -269,10 +326,30 @@ export function SiteContentProvider({ children }: { children: ReactNode }) {
     await persist(deepMerge(cur, patch) as SiteContent, ov);
   }, [loadPair, persist]);
 
+  /** Edit one collection's intro copy without touching any other collection. */
+  const saveCollectionContent = useCallback(async (categorySlug: string, patch: Partial<CollectionContent>) => {
+    const [cur, ov] = await loadPair();
+    const next: SiteContent = {
+      ...cur,
+      collections: { ...cur.collections, [categorySlug]: { ...cur.collections[categorySlug], ...patch } },
+    };
+    await persist(next, ov);
+  }, [loadPair, persist]);
+
   const saveProductText = useCallback(async (productSlug: string, text: TextOverride) => {
     const [cur, ov] = await loadPair();
-    await persist(cur, { ...ov, [productSlug]: { ...ov[productSlug], text } });
+    // Merge specs patches so editing Care never wipes the rest of `specs`.
+    const prevText = ov[productSlug]?.text;
+    const mergedText: TextOverride = prevText && text.specs
+      ? { ...prevText, ...text, specs: { ...(prevText.specs ?? {}), ...text.specs } }
+      : { ...prevText, ...text };
+    await persist(cur, { ...ov, [productSlug]: { ...ov[productSlug], text: mergedText } });
   }, [loadPair, persist]);
+
+  /** Edit only the Care-instructions copy without touching colour options etc. */
+  const saveProductCare = useCallback(async (productSlug: string, careInstructions: string) => {
+    await saveProductText(productSlug, { specs: { careInstructions } });
+  }, [saveProductText]);
 
   const saveProductImage = useCallback(async (productSlug: string, imageUrl: string | null) => {
     const [cur, ov] = await loadPair();
@@ -289,8 +366,8 @@ export function SiteContentProvider({ children }: { children: ReactNode }) {
   }, [persist]);
 
   const value = useMemo<SiteContentCtx>(() => ({
-    content, productOverrides, saveContent, saveProductText, saveProductImage, saveProductHidden, resetAll, saving,
-  }), [content, productOverrides, saveContent, saveProductText, saveProductImage, saveProductHidden, resetAll, saving]);
+    content, productOverrides, saveContent, saveCollectionContent, saveProductText, saveProductCare, saveProductImage, saveProductHidden, resetAll, saving,
+  }), [content, productOverrides, saveContent, saveCollectionContent, saveProductText, saveProductCare, saveProductImage, saveProductHidden, resetAll, saving]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
