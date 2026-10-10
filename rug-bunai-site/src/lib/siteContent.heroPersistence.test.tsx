@@ -35,51 +35,106 @@ class LocalStorageShim {
 
 // ── Fake Supabase: emulates the site_content row ─────────────────────────────
 type Row = { id: number; data: Record<string, unknown>; updated_at?: string };
-const db = { rows: new Map<number, Row>(), failNextRead: false, failNextWrite: false };
+// ONE shared in-memory store behind every fake-client request.
+const store = { row: null as Row | null };
+const db = {
+  // Small facade so tests can seed/inspect the single site_content row by id.
+  rows: {
+    get size() { return store.row ? 1 : 0; },
+    clear: () => { store.row = null; },
+    get(id: number) { return id === 1 && store.row ? store.row : undefined; },
+    set(id: number, row: Row) { if (id === 1) store.row = structuredClone(row); },
+  },
+  failNextRead: false, failNextWrite: false, log: [] as string[],
+};
 
-function makeQuery(log: Array<{ method: string; body?: unknown; filters: Array<[string, string]> }>) {
+/** Minimal in-memory PostgREST stand-in for the single-row `site_content`
+ *  table. Every from() call returns a FRESH builder over ONE shared store;
+ *  inserts and updates persist so subsequent independent reads see them.
+ *  `delay`/gate support lets tests genuinely race a slow hydration read
+ *  against a fast save. No CAS filters or RLS emulation — the production
+ *  code under test deliberately uses plain `.eq('id', 1)` writes guarded by
+ *  a pre-write re-read + post-write verification. */
+interface FakeShared { mode: 'select' | 'update' | 'insert'; body?: Record<string, unknown>; filters: Array<[string, string]> }
+
+/** Per-query execution rules consulted by the fake at EXECUTION time. A test
+ *  pushes a rule (e.g. a gate that hangs the query until released) and the
+ *  NEXT from() call attaches it — deterministic, no builder-capture races. */
+interface FakeRule { delay?: number; gate?: Promise<void>; match?: (filters: Array<[string, string]>) => boolean }
+const pendingRules: FakeRule[] = [];
+let activeGate: { resolve: () => void; promise: Promise<void> } | null = null;
+/** Hang the NEXT query whose filters contain `col=val` (e.g. the hydration
+ *  SELECT on id=1) until releaseGate() is called. Deterministic: save-path
+ *  queries are never captured by mistake. */
+function armGateForQuery(col: string, val: string): void {
+  let resolve!: () => void;
+  const promise = new Promise<void>((r) => { resolve = r; });
+  activeGate = { resolve, promise };
+  pendingRules.push({ gate: promise, match: (f) => f.some(([c, v]) => c === col && v === val) });
+}
+async function releaseGate(): Promise<void> {
+  const g = activeGate!;
+  g.resolve();
+  await settle(2);
+}
+
+function makeQuery() {
+  const shared: FakeShared = { mode: 'select', body: undefined, filters: [] };
+  let rule: { delay?: number; gate?: Promise<void> } | null = null;
+  let executed = false;
   const q: Record<string, any> = {};
-  let mode: 'select' | 'update' | 'insert' = 'select';
-  let body: Record<string, unknown> | undefined;
-  q.from = () => q;
-  q.select = () => { mode = 'select'; log.push({ method: 'select', filters: [] }); return q; };
-  q.insert = (row: Record<string, unknown>) => { mode = 'insert'; body = row; log.push({ method: 'insert', body: row, filters: [] }); return q; };
-  q.update = (patch: Record<string, unknown>) => { mode = 'update'; body = patch; log.push({ method: 'update', body: patch, filters: [] }); return q; };
-  q.eq = (col: string, val: unknown) => { log[log.length - 1]!.filters.push([col, String(val)]); return q; };
+  q.from = () => { return q; };
+  q.select = () => { shared.mode = 'select'; return q; };
+  q.insert = (row: Record<string, unknown>) => { shared.mode = 'insert'; shared.body = row; return q; };
+  q.update = (patch: Record<string, unknown>) => { shared.mode = 'update'; shared.body = patch; return q; };
+  q.insert = (row: Record<string, unknown>) => { shared.mode = 'insert'; shared.body = row; return q; };
+  q.update = (patch: Record<string, unknown>) => { shared.mode = 'update'; shared.body = patch; return q; };
+  q.eq = (col: string, val: unknown) => { shared.filters.push([col, String(val)]); return q; };
   q.maybeSingle = async () => {
-    const entry = log[log.length - 1]!;
-    if (mode === 'select') {
-      if (db.failNextRead) { db.failNextRead = false; return { data: null, error: { message: 'schema cache miss (simulated)' } }; }
-      const row = db.rows.get(1);
+    // Attach a matching armed rule at EXECUTION time (filters now complete),
+    // then pay its latency/gate cost on the first execution only.
+    if (!executed) {
+      executed = true;
+      for (let i = 0; i < pendingRules.length; i++) {
+        const r = pendingRules[i]!;
+        if (!r.match || r.match(shared.filters)) { rule = r; pendingRules.splice(i, 1); break; }
+      }
+      if (rule?.delay) await new Promise((r) => setTimeout(r, rule!.delay));
+      if (rule?.gate) await rule.gate;
+    }
+    if (shared.mode === 'select') {
+      // Flags & store read at EXECUTION time — never snapshotted at build time.
+      if (db.failNextRead) { db.failNextRead = false; db.log.push('select FAIL'); return { data: null, error: { message: 'schema cache miss (simulated)' } }; }
+      const row = store.row;
+      db.log.push(`select -> ${row ? `rev=${(row.data as any)._rev}` : 'NULL'}`);
+      // PostgREST returns ONLY the requested columns: select('data').
       return { data: row ? { data: structuredClone(row.data) } : null, error: null };
     }
-    if (mode === 'insert') {
-      if (db.failNextWrite) { db.failNextWrite = false; return { data: null, error: { message: 'row-level security (simulated)' } }; }
-      db.rows.set(1, { id: 1, data: structuredClone(body as Row['data']) });
+    if (db.failNextWrite) { db.failNextWrite = false; db.log.push(`WRITE FAIL (${shared.mode})`); return { data: null, error: { message: 'write failed (simulated)' } }; }
+    if (shared.mode === 'insert') {
+      if (store.row) { db.log.push('insert DUP-ERR'); return { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint "site_content_pkey"' } }; }
+      const b = shared.body as { id?: number; data?: Record<string, unknown> };
+      store.row = { id: b.id ?? 1, data: structuredClone(b.data ?? {}) };
+      db.log.push(`insert rev=${((b.data ?? {}) as any)._rev}`);
       return { data: null, error: null };
     }
-    // update: WHERE filters are evaluated against the CURRENT row (CAS semantics)
-    if (db.failNextWrite) { db.failNextWrite = false; return { data: null, error: { message: 'failed to update (simulated)' } }; }
-    const row = db.rows.get(1);
-    // PostgREST compares JSONB scalars by type: `data->>_rev` is TEXT on both
-    // sides of the filter, so normalise numbers to strings when matching.
-    const norm = (v: unknown) => (typeof v === 'number' || typeof v === 'boolean' ? String(v) : v);
-    const matches = !!row && entry.filters.every(([col, val]) => {
-      if (col === 'id') return String(row.id) === val;
-      if (col.startsWith('data->>')) return String(norm((row.data as Record<string, unknown>)[col.slice(7)])) === val;
-      return false;
-    });
+    // update: WHERE filters evaluated against the CURRENT row.
+    const row = store.row;
+    const matches = !!row && shared.filters.every(([col, val]) => col === 'id' ? String(row.id) === val : false);
+    const patch = shared.body as { data?: Record<string, unknown>; updated_at?: string };
+    db.log.push(`update rev=${((patch.data ?? {}) as any)._rev} match=${matches}`);
     if (!matches) return { data: null, error: null }; // zero rows matched — NOT an error
-    db.rows.set(1, { id: 1, data: structuredClone(body as Row['data']) });
+    store.row = { id: 1, data: structuredClone(patch.data ?? {}), updated_at: patch.updated_at };
     return { data: null, error: null };
   };
   return q;
 }
 
 const fakeClient = {
-  from: () => makeQuery([]),
   storage: { from: () => ({ upload: async () => ({ data: null, error: null }) }) },
-};
+} as Record<string, any>;
+// Every from() call returns a FRESH builder over the ONE shared store.
+fakeClient.from = () => makeQuery();
 vi.mock('./supabase', () => ({ supabase: fakeClient, isSupabaseConfigured: true, requireSupabase: () => fakeClient }));
 
 // Import AFTER mocks are registered.
@@ -87,7 +142,16 @@ const SC = await import('./siteContent');
 const { SiteContentProvider, DEFAULT_CONTENT, LS_KEY, LS_OVERRIDES, splitStoredPayload } = SC;
 const { homeProductImage } = await import('./images');
 
+/** Flush pending microtasks AND macrotasks inside act() so async effects and
+ *  state updates fully complete before assertions run. */
+async function settle(times = 6): Promise<void> {
+  for (let i = 0; i < times; i++) {
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+  }
+}
+
 // ── Harness: mount the real provider in jsdom, capture its context ──────────
+(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 let captured!: SiteContentCtxLike;
 type SiteContentCtxLike = NonNullable<ReturnType<typeof SC.useSiteContent>>;
 function Harness(): ReactNode {
@@ -101,15 +165,20 @@ function cleanup() {
   if (container) { container.remove(); container = null; }
 }
 
-async function setup() {
+async function setup(opts: { strict?: boolean; slowHydration?: boolean } = {}) {
   vi.stubGlobal('localStorage', new LocalStorageShim());
   db.rows.clear(); db.failNextRead = false; db.failNextWrite = false;
+  pendingRules.length = 0; activeGate = null; db.log = [];
   cleanup();
+  if (opts.slowHydration) armGateForQuery('id', '1'); // the hydration SELECT hangs until releaseGate()
   container = document.createElement('div');
   document.body.appendChild(container);
+  const tree = (
+    <SiteContentProvider><Harness /></SiteContentProvider>
+  );
   await act(async () => {
     root = createRoot(container as unknown as Element);
-    root.render(<StrictMode><SiteContentProvider><Harness /></SiteContentProvider></StrictMode>);
+    root.render(opts.strict === false ? tree : <StrictMode>{tree}</StrictMode>);
   });
   return captured!;
 }
@@ -158,7 +227,9 @@ describe('hero slide persistence through the provider (fake Supabase)', () => {
   it('saving Slide 3 does not overwrite Slide 1 (index consistency)', async () => {
     const ctx = await setup();
     await act(async () => { await ctx.saveContent({ heroSlides: DEFAULT_CONTENT.heroSlides.map((s, i) => (i === 0 ? { ...s, imageUrl: 'https://cdn/slide1.jpg' } : s)) }); });
-    await act(async () => { await ctx.saveContent({ heroSlides: DEFAULT_CONTENT.heroSlides.map((s, i) => (i === 2 ? { ...s, imageUrl: 'https://cdn/slide3.jpg' } : s)) }); });
+    // Studio semantics: the editor edits the CURRENT slide array (hydrated
+    // content), changing exactly one index — never re-derives from defaults.
+    await act(async () => { await ctx.saveContent({ heroSlides: ctx.content.heroSlides.map((s, i) => (i === 2 ? { ...s, imageUrl: 'https://cdn/slide3.jpg' } : s)) }); });
     const stored = db.rows.get(1)!.data as any;
     expect(stored.heroSlides[0].imageUrl).toBe('https://cdn/slide1.jpg');
     expect(stored.heroSlides[2].imageUrl).toBe('https://cdn/slide3.jpg');
@@ -190,7 +261,7 @@ describe('hero slide persistence through the provider (fake Supabase)', () => {
 
     // Session B: brand-new browser session (empty localStorage, same server row).
     const ctxB = await setup();
-    await act(async () => { await Promise.resolve(); }); // let the hydration effect settle
+    await settle(4); // let the hydration effect's Supabase round-trip complete
     expect(ctxB.content.heroSlides[0].imageUrl).toBe('https://cdn/hero-new.jpg');
     // THE FIX: before, hydration never restored productOverrides into state.
     expect(ctxB.productOverrides['mughal-garden-floral']?.homeImageUrl).toBe('https://cdn/home-mughal.jpg');
@@ -204,21 +275,41 @@ describe('hero slide persistence through the provider (fake Supabase)', () => {
   });
 
   it('delayed hydration cannot overwrite a more recent successful save', async () => {
-    // Pre-seed the server with OLD content whose read will resolve late.
+    // Pre-seed the server with OLD content whose read is held in flight by the
+    // gate — the save below genuinely completes BEFORE the hydration response.
     db.rows.set(1, { id: 1, data: { ...structuredClone(DEFAULT_CONTENT) as any, productOverrides: {}, _rev: 5, _savedAt: 'old' } });
-    const ctx = await setup();
+    const ctx = await setup({ slowHydration: true });
+    await settle(3); // let the hung hydration SELECT get issued
     // Admin saves immediately (before the slow hydration promise settles).
     await act(async () => {
       await ctx.saveContent({ heroSlides: DEFAULT_CONTENT.heroSlides.map((s, i) => (i === 0 ? { ...s, imageUrl: 'https://cdn/new-save.jpg' } : s)) });
     });
-    // Now let any pending hydration continuation flush — it must NOT clobber.
-    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    // Release the stale read; its continuation must NOT clobber the save…
+    await act(async () => { await releaseGate(); });
     expect(ctx.content.heroSlides[0].imageUrl).toBe('https://cdn/new-save.jpg');
+    // …and the NEXT save must not be poisoned by the late-landing rev either.
+    await act(async () => {
+      await ctx.saveContent({ topbar: 'AFTER SLOW READ' });
+    });
     const stored = db.rows.get(1)!.data as any;
+    expect(stored.topbar).toBe('AFTER SLOW READ');
     expect(stored.heroSlides[0].imageUrl).toBe('https://cdn/new-save.jpg');
   });
 
-  it('concurrent server edits are detected: stale write refuses to clobber newer content', async () => {
+  it('a slow first-load hydration that lands after a save never rewinds the CAS revision', async () => {
+    // Same race, asserted directly on the row: every write must keep landing.
+    const ctx = await setup({ slowHydration: true });
+    await settle(3);
+    await act(async () => { await ctx.saveContent({ topbar: 'SAVE ONE' }); });
+    await act(async () => { await releaseGate(); }); // stale empty/older read lands here
+    await act(async () => { await ctx.saveContent({ topbar: 'SAVE TWO' }); });
+    await act(async () => { await ctx.saveContent({ topbar: 'SAVE THREE' }); });
+    const stored = db.rows.get(1)!.data as any;
+    expect(stored.topbar).toBe('SAVE THREE');
+    expect(ctx.content.topbar).toBe('SAVE THREE');
+  });
+
+  it('a concurrent server edit is merged, not clobbered', async () => {
     const ctx = await setup();
     await act(async () => { await ctx.saveContent({ topbar: 'LOCAL EDIT' }); });
     // Another admin bumps the row behind our back (rev jumps ahead).

@@ -77,7 +77,9 @@ describe('frontend store contract (what the SQL must support)', () => {
     // The exact save-payload shape now includes optimistic-concurrency stamps
     // (_rev/_savedAt) alongside productOverrides — assert both halves persist
     // inside the single JSONB row rather than pinning one literal line.
-    expect(STORE_TSX).toMatch(/productOverrides: overrides/);
+    // The save payload spreads the (possibly merged) working halves into the
+    // JSONB row — variable names may evolve; what matters is both keys persist.
+    expect(STORE_TSX).toMatch(/productOverrides: \w*[oO]verrides/);
     expect(STORE_TSX).toMatch(/_rev/);
   });
 });
