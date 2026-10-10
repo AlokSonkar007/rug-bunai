@@ -13,10 +13,11 @@ import {
   type CustomColourRequest, type ProductColourOption,
 } from '../lib/colours';
 import {
-  SIZE_OPTIONS, STANDARD_SIZE_KEYS, feetOf, validateSizeFeet, customSizeEstimate, formatFtLabel,
+  SIZE_OPTIONS, STANDARD_SIZE_KEYS, feetOf, validateSizeFeet, formatFtLabel,
   stainCoatCostForFt, STAIN_COAT_RATE_INR_PER_SQFT,
   productRatePerSqft, resolveStandardSize, type ResolvedSize,
 } from '../lib/sizes';
+import { customEstimateInr } from '../lib/pricing';
 
 const CUSTOM_SENTINEL = '__custom__';
 const CUSTOM_SIZE_KEY = 'custom';
@@ -140,16 +141,17 @@ export default function ProductPage() {
       : validateSizeFeet(w, l);
     return { w, l, valid: error === null, error };
   }, [custW, custL]);
-  /** Estimate derived from this rug's own rate card (base price ÷ base area).
-   *  The studio confirms before production — no invented markup, no silent
-   *  fallback to a standard-size price. */
+  /** Canonical custom-size estimate — THE SAME RULE the database applies at
+   *  checkout (migration 0007 create_order(): min(listed variant price) ×
+   *  custom sq ft, rounded). Kept identical on purpose: whatever the Studio
+   *  shows the customer is exactly what the trusted server will charge, so
+   *  buildOrderItems() never has to refuse an honest cart. The atelier still
+   *  confirms feasibility/final pricing for bespoke pieces before weaving. */
   const customEstimate = useMemo(() => {
     if (!product || !customDims.valid) return null;
-    const base = product.variants.find((v) => v.priceInr > 0) ?? product.variants[0];
-    if (!base || base.priceInr <= 0) return null;
-    return customSizeEstimate(
-      base.priceInr, feetOf(base.width), feetOf(base.length), customDims.w, customDims.l,
-    );
+    const priced = product.variants.map((v) => v.priceInr).filter((p) => Number.isInteger(p) && p > 0);
+    if (priced.length === 0) return null;
+    return customEstimateInr(Math.min(...priced), customDims.w, customDims.l);
   }, [product, customDims]);
 
   // ── Stain-resistant coating (optional add-on, ₹90/sq ft — sizes.ts rate) ──
@@ -214,7 +216,7 @@ export default function ProductPage() {
         ...(usingCustom && selectedCustom ? { colorHex: selectedCustom.hex } : {}),
         priceInr: customEstimate,
         ...(coating ? { coating: true } : {}),
-        note: `Custom size request: ${formatFtLabel(customDims.w, customDims.l)} (≈ ${Math.round(customDims.w * customDims.l)} sq ft). Estimate ${formatINR(customEstimate)} at this rug's derived ₹/sq ft rate — production feasibility and final pricing to be confirmed by Rug Bunai before weaving.${coating ? ` Stain-resistant coating requested: +${formatINR(stainCoatCostForFt(customDims.w, customDims.l))} (${Math.round(customDims.w * customDims.l * 10) / 10} sq ft × ₹${STAIN_COAT_RATE_INR_PER_SQFT}/sq ft).` : ''}${usingCustom ? ` Custom colour: ${currentColourLabel}.` : ''}`,
+        note: `Custom size request: ${formatFtLabel(customDims.w, customDims.l)} (≈ ${Math.round(customDims.w * customDims.l)} sq ft). Estimate ${formatINR(customEstimate)} at this design's trusted ₹/sq ft base rate — production feasibility and final pricing to be confirmed by Rug Bunai before weaving.${coating ? ` Stain-resistant coating requested: +${formatINR(stainCoatCostForFt(customDims.w, customDims.l))} (${Math.round(customDims.w * customDims.l * 10) / 10} sq ft × ₹${STAIN_COAT_RATE_INR_PER_SQFT}/sq ft).` : ''}${usingCustom ? ` Custom colour: ${currentColourLabel}.` : ''}`,
       });
       notify(`Custom-size request added — ${formatFtLabel(customDims.w, customDims.l)}`);
       return;
@@ -475,7 +477,7 @@ export default function ProductPage() {
                 )}
                 {customDims.valid && customEstimate !== null && (
                   <p className="muted" style={{ fontSize: '0.85rem', marginTop: 8 }}>
-                    Estimate: <strong>{formatINR(customEstimate)}</strong> ≈ {Math.round(customDims.w * customDims.l)} sq ft at this rug's derived ₹/sq ft rate.
+                    Estimate: <strong>{formatINR(customEstimate)}</strong> ≈ {Math.round(customDims.w * customDims.l)} sq ft at this design's trusted ₹/sq ft base rate.
                   </p>
                 )}
                 {customDims.valid && customEstimate === null && (

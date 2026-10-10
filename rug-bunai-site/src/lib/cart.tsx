@@ -3,7 +3,8 @@ import type { Product, Variant } from '../data/products';
 import { useAuth } from './auth';
 import { useCatalog, type CustomOffer } from './catalog';
 import { supabase } from './supabase';
-import { feetOf, lineSqft, lineTotalInr, stainCoatCost } from './sizes';
+import { feetOf, lineSqft, lineTotalInr } from './sizes';
+import { coatInrForFt } from './pricing';
 
 export interface CartLine {
   readonly variantId: string;
@@ -150,7 +151,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
     // Round sq ft to 0.1 so stored-cm drift never changes the ₹ amount.
     const sqft = Math.round(widthFt * lengthFt * 10) / 10;
     void lineSqft; // canonical cm→sqft helper kept exported for tests/parity
-    const coatPerUnitInr = line.coating ? stainCoatCost(sqft) : 0;
+    // Coating via the canonical trusted rule — identical maths to the DB.
+    const coatPerUnitInr = line.coating ? coatInrForFt(widthFt, lengthFt) : 0;
     return [{
       product,
       variant,

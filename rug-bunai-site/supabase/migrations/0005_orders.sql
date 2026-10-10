@@ -112,10 +112,14 @@ create policy "Admins read all order items"
 -- clamps quantities, and rejects malformed payloads atomically (all items
 -- validated before any row is inserted; the whole body runs in the implicit
 -- transaction of the RPC call, so a mid-way failure rolls everything back).
--- The frontend additionally recomputes every price from trusted catalogue +
--- pricing rules before calling this function. (A fully server-authoritative
--- price lookup would need the catalogue moved into Postgres — noted as a
--- follow-up; today products live in source code.)
+-- ⚠ VULNERABILITY NOTE (fixed by migration 0007): this revision accepts
+-- unit_price_paise / coating_charge_paise FROM THE BROWSER — those amounts
+-- are NOT trusted inputs. Migration 0007_cod_orders_trusted_pricing.sql
+-- replaces this signature entirely with a price-free create_order() that
+-- recomputes every rupee server-side from public.product_prices, drops this
+-- old function, and adds the notification outbox. Once 0007 is applied there
+-- is exactly one entry point and no client-supplied money anywhere. This
+-- file is kept unchanged for existing deployments/rollback only.
 create or replace function public.create_order(
   p_idempotency_key uuid,
   p_email text,
