@@ -5,6 +5,7 @@ import { useAuth } from '../lib/auth';
 import { MATERIALS, ROOMS, TECHNIQUES } from '../data/vocabularies';
 import { rugImage } from '../lib/rugArt';
 import { getProduct } from '../data/products';
+import { whatsappLink, CONTACT_PHONE_DISPLAY, WHATSAPP_TEL_HREF } from '../lib/siteContent';
 
 /** Desktop "Collections" mega-menu content — shared by hover panel & mobile drawer. */
 function MegaMenu({ onNavigate }: { onNavigate?: () => void }) {
@@ -194,6 +195,14 @@ export default function Layout() {
               )}
             </form>
 
+            <a
+              href={WHATSAPP_TEL_HREF}
+              className="icon-btn header-call"
+              aria-label={`Call us on ${CONTACT_PHONE_DISPLAY}`}
+              title={`Call ${CONTACT_PHONE_DISPLAY}`}
+            >
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M6.5 3.5 9 3l2 4.5-2.2 1.8a13.5 13.5 0 0 0 5.9 5.9l1.8-2.2 4.5 2-.5 2.5c-.2 1.3-1.4 2.2-2.7 2C11.6 19.9 4.1 12.4 3.5 6.2c-.2-1.3.7-2.5 2-2.7Z"/></svg>
+            </a>
             <span className="account-links">
               {user ? (
                 <>
@@ -264,7 +273,30 @@ export default function Layout() {
       </main>
 
       <SiteFooter />
+
+      {/* Floating WhatsApp concierge — bottom-right, expands label on hover */}
+      <WhatsAppFab />
     </div>
+  );
+}
+
+/** Floating green WhatsApp button with hover label ("Chat with us on WhatsApp"). */
+export function WhatsAppFab() {
+  return (
+    <a
+      className="wa-fab"
+      href={whatsappLink('Hello Rug Bunai! I have a question about your rugs.')}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label="Chat with us on WhatsApp"
+    >
+      <span className="wa-fab-label">Chat with us on WhatsApp</span>
+      <span className="wa-fab-icon" aria-hidden="true">
+        <svg width="30" height="30" viewBox="0 0 32 32" fill="#ffffff">
+          <path d="M16.04 3.2c-7.06 0-12.8 5.73-12.8 12.79 0 2.26.6 4.47 1.73 6.41L3.2 28.8l6.57-1.72a12.77 12.77 0 0 0 6.26 1.6h.01c7.06 0 12.8-5.74 12.8-12.8 0-3.42-1.33-6.63-3.75-9.04a12.72 12.72 0 0 0-9.05-3.64zm0 23.32h-.01a10.6 10.6 0 0 1-5.4-1.48l-.39-.23-4.02 1.05 1.08-3.92-.26-.4a10.58 10.58 0 0 1-1.62-5.66c0-5.86 4.77-10.63 10.63-10.63 2.84 0 5.51 1.11 7.52 3.12a10.56 10.56 0 0 1 3.11 7.52c0 5.87-4.77 10.63-10.64 10.63zm5.83-7.96c-.32-.16-1.89-.93-2.18-1.04-.29-.11-.5-.16-.72.16-.21.32-.82 1.04-1.01 1.25-.18.21-.37.24-.69.08-.32-.16-1.34-.49-2.56-1.58-.94-.84-1.58-1.88-1.77-2.2-.18-.32-.02-.49.14-.65.14-.14.32-.37.48-.56.16-.19.21-.32.32-.53.11-.21.05-.4-.03-.56-.08-.16-.72-1.73-.98-2.37-.26-.62-.52-.54-.72-.55l-.61-.01c-.21 0-.56.08-.85.4-.29.32-1.11 1.09-1.11 2.66s1.14 3.08 1.3 3.29c.16.21 2.24 3.42 5.43 4.8.76.33 1.35.52 1.81.67.76.24 1.45.21 2 .13.61-.09 1.89-.77 2.15-1.52.27-.75.27-1.39.19-1.52-.08-.13-.29-.21-.61-.37z"/>
+        </svg>
+      </span>
+    </a>
   );
 }
 
@@ -303,16 +335,24 @@ export function SiteFooter() {
             <li><Link to="/story">Our Story</Link></li>
             <li><Link to="/journal">Journal</Link></li>
             <li><Link to="/contact">Contact</Link></li>
-            <li><Link to="/policies/shipping">Shipping</Link></li>
-            <li><Link to="/policies/returns">Returns</Link></li>
-            <li><Link to="/policies/privacy">Privacy</Link></li>
+            <li><a href={whatsappLink('Hello Rug Bunai! I have a question about your rugs.')} target="_blank" rel="noopener noreferrer">Chat on WhatsApp</a></li>
+          </ul>
+        </div>
+        <div className="footer-col">
+          <h4>Policies</h4>
+          <ul>
+            <li><Link to="/policies/privacy">Privacy Policy</Link></li>
+            <li><Link to="/policies/terms">Terms of Sale</Link></li>
+            <li><Link to="/policies/shipping">Shipping Policy</Link></li>
+            <li><Link to="/policies/returns">Returns &amp; Refunds</Link></li>
+            <li><Link to="/policies/faqs">FAQs</Link></li>
           </ul>
         </div>
       </div>
       <div className="wrap footer-base">
         <span>Rug Bunai · Bhadohi, Uttar Pradesh, India — 221401</span>
         <span>
-          <a href="tel:+919044169163" style={{ letterSpacing: '0.12em' }}>+91 90441 69163</a>
+          <a href={WHATSAPP_TEL_HREF} style={{ letterSpacing: '0.12em' }}>{CONTACT_PHONE_DISPLAY}</a>
         </span>
         <span>© {new Date().getFullYear()} Rug Bunai. All knots placed by hand.</span>
       </div>

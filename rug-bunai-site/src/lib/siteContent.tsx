@@ -14,6 +14,7 @@ import { supabase } from './supabase';
 
 export const WHATSAPP_NUMBER = '919555036025'; // +91-9555036025
 export const CONTACT_PHONE_DISPLAY = '+91 95550 36025';
+export const WHATSAPP_TEL_HREF = `tel:+${WHATSAPP_NUMBER}`; // +91-9555036025
 export const whatsappLink = (text: string) =>
   `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(text)}`;
 
