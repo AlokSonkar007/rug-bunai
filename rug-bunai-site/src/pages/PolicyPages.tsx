@@ -19,7 +19,7 @@ const POLICIES: Record<string, PolicyDoc> = {
    * consent or notification workflows that are not actually implemented
    * in this application.
    */
-  privacy: {
+  'privacy-policy': {
     eyebrow: 'Legal',
     title: 'Privacy Policy',
     updated: UPDATED,
@@ -298,7 +298,7 @@ export default function PolicyPage() {
   }
 
   return (
-    <article className="wrap section" style={{ maxWidth: '74ch' }}>
+    <article className="wrap section policy-page" style={{ maxWidth: '74ch' }}>
       <p className="eyebrow">{doc.eyebrow}</p>
       <h1 className="display" style={{ margin: '10px 0 6px' }}>{doc.title}</h1>
       <p className="muted" style={{ fontSize: '0.78rem', letterSpacing: '0.12em', textTransform: 'uppercase' }}>{doc.updated}</p>

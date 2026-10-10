@@ -1083,3 +1083,6 @@ main { flex: 1; }
 
 /* Studio content-management tabs */
 .studio-tabs { display: flex; gap: 18px; flex-wrap: wrap; border-bottom: 1px solid var(--line); margin-top: 26px; }
+
+/* Privacy/policy pages: keep the fixed WhatsApp FAB clear of the page-end actions on small screens. */
+.policy-page { padding-bottom: 96px; }

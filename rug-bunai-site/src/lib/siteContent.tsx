@@ -184,7 +184,7 @@ export const DEFAULT_CONTENT: SiteContent = {
         { label: 'Shipping Policy', to: '/policies/shipping' },
         { label: 'Returns & Exchange', to: '/policies/returns' },
         { label: 'Care Guide', to: '/journal/rug-size-guide' },
-        { label: 'Privacy Policy', to: '/policies/privacy' },
+        { label: 'Privacy Policy', to: '/policies/privacy-policy' },
       ],
     },
   ],

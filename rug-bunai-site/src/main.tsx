@@ -1,6 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { createBrowserRouter, RouterProvider } from 'react-router-dom';
+import { createBrowserRouter, Navigate, RouterProvider } from 'react-router-dom';
 import Layout from './components/Layout';
 import CollectionView, { CategoryCollectionView } from './components/CollectionView';
 import HomePage from './pages/HomePage';
@@ -8,6 +8,7 @@ import ProductPage from './pages/ProductPage';
 import { ArticlePage, JournalPage } from './pages/JournalPage';
 import StoryPage from './pages/StoryPage';
 import ContactPage, { NotFound } from './pages/InfoPages';
+import PolicyPage from './pages/PolicyPages';
 import { CartPage, CheckoutPage } from './pages/CartPages';
 import { LoginPage } from './pages/AuthPages';
 import WishlistPage from './pages/WishlistPage';
@@ -41,6 +42,13 @@ const router = createBrowserRouter([
       { path: 'admin/login', element: <LoginPage adminOnly /> },
       { path: 'admin', element: <AdminPage /> },
       { path: 'contact', element: <ContactPage /> },
+      // Storefront policies (Privacy Policy at /policies/privacy-policy, plus
+      // Terms of Sale, Shipping, Returns & Refunds and FAQs) rendered by the
+      // existing PolicyPages component. The legacy '/policies/privacy' URL is
+      // redirected so previously published links keep working.
+      { path: 'policies', element: <Navigate to="/policies/privacy-policy" replace /> },
+      { path: 'policies/privacy', element: <Navigate to="/policies/privacy-policy" replace /> },
+      { path: 'policies/:slug', element: <PolicyPage /> },
       { path: '*', element: <NotFound /> },
     ],
   },
