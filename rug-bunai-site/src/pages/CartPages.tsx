@@ -1,9 +1,14 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { formatINR } from '../data/products';
 import { useCart } from '../lib/cart';
 import { STAIN_COAT_RATE_INR_PER_SQFT } from '../lib/sizes';
 import { productImage } from '../lib/images';
+import { useAuth } from '../lib/auth';
+import {
+  fetchMyOrder, fetchMyOrders, formatPaise, newIdempotencyKey, placeOrder,
+  type OrderDetailRow, type OrderItemRow, type OrderSummaryRow,
+} from '../lib/orders';
 
 export function CartPage() {
   const cart = useCart();
@@ -95,17 +100,28 @@ type Errors = Partial<Record<'email' | 'name' | 'address' | 'city' | 'pin' | 'ca
 
 export function CheckoutPage() {
   const cart = useCart();
-  const [placed, setPlaced] = useState<string | null>(null);
+  const { user, profile } = useAuth();
+  const [placed, setPlaced] = useState<{ orderId: string; totalInr: number; email: string } | null>(null);
   const [errors, setErrors] = useState<Errors>({});
-  const [form, setForm] = useState({ email: '', name: '', address: '', city: '', pin: '', card: '' });
+  const [form, setForm] = useState({
+    email: user?.email ?? profile?.email ?? '',
+    name: profile?.display_name ?? '',
+    address: '', city: '', pin: '', card: '',
+  });
+  /** One key per checkout attempt — reused across retries so a network
+   *  retry returns the original order instead of creating a duplicate. */
+  const [attemptKey, setAttemptKey] = useState<string>(() => newIdempotencyKey());
+  const [submitting, setSubmitting] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
 
   const lines = cart.items;
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting) return; // guard against accidental double submission
     const errs: Errors = {};
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.email)) errs.email = 'Enter a valid email address.';
     if (form.name.trim().length < 3) errs.name = 'Full name required.';
@@ -115,22 +131,59 @@ export function CheckoutPage() {
     if (form.card.replace(/\s/g, '').length < 12) errs.card = 'Card number looks too short.';
     setErrors(errs);
     if (Object.keys(errs).length > 0) return;
-    const orderId = 'RB-' + Math.random().toString(36).slice(2, 8).toUpperCase();
-    setPlaced(orderId);
-    cart.clear();
-    window.scrollTo(0, 0);
+    if (!user) {
+      setServerError('Please sign in before placing your order — it keeps your order history safe and private.');
+      window.scrollTo(0, 0);
+      return;
+    }
+
+    const totalInr = cart.subtotalInr;
+    setSubmitting(true);
+    setServerError(null);
+    try {
+      // Trusted persistence path: the Supabase security-definer RPC derives
+      // the customer from auth.uid(), validates every item, and re-totals
+      // server-side. The cart is cleared ONLY after this succeeds.
+      const result = await placeOrder({
+        email: form.email,
+        fullName: form.name,
+        address: form.address,
+        city: form.city,
+        pin: form.pin,
+        lines: cart.items,
+        idempotencyKey: attemptKey,
+      });
+      setPlaced({ orderId: result.orderId, totalInr, email: form.email });
+      cart.clear();
+      window.scrollTo(0, 0);
+    } catch (err) {
+      // Keep the cart intact; let the admin retry with the SAME key so a
+      // partially-failed first attempt can't create a duplicate order.
+      setServerError(err instanceof Error ? err.message : 'Something went wrong saving your order. Your cart has been kept — please try again.');
+      window.scrollTo(0, 0);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (placed) {
     return (
       <div className="wrap empty-state">
-        <p className="eyebrow">Order {placed}</p>
+        <p className="eyebrow">Order {placed.orderId}</p>
         <h1 className="headline" style={{ margin: '12px 0' }}>The loom has your instruction.</h1>
         <p className="muted" style={{ maxWidth: '46ch', margin: '0 auto' }}>
-          A confirmation is on its way to {form.email}. Your pieces will be washed, sunned and
-          photographed before dispatch — expect provenance cards with every knot count.
+          Order saved — {formatINR(placed.totalInr)} including any coating charges. A confirmation
+          is on its way to {placed.email}. Your pieces will be washed, sunned and photographed
+          before dispatch — expect provenance cards with every knot count.
         </p>
-        <Link to="/rugs" className="btn btn-solid" style={{ marginTop: 26 }}>Back to the Archive</Link>
+        <p className="muted" style={{ fontSize: '0.75rem', marginTop: 12 }}>
+          Payment status: pending. Our team will contact you with payment instructions — no card
+          details are stored by this website.
+        </p>
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 26, flexWrap: 'wrap' }}>
+          <Link to="/orders" className="btn btn-solid">View my orders</Link>
+          <Link to="/rugs" className="btn">Back to the Archive</Link>
+        </div>
       </div>
     );
   }
@@ -190,8 +243,22 @@ export function CheckoutPage() {
           </div>
           <p className="muted" style={{ fontSize: '0.75rem', marginBottom: 20 }}>
             Payments process through Shopify Pay in production; this demo validates locally and never stores card data.
+            Orders are saved as <strong>payment pending</strong> — no charge is made from the details above.
           </p>
-          <button className="btn btn-solid btn-block" type="submit">Place order — {formatINR(cart.subtotalInr)}</button>
+          {serverError && (
+            <div className="field-error" role="alert" style={{ marginBottom: 16 }}>
+              {serverError}
+              {' '}<button type="button" className="btn btn-linklike" onClick={() => setAttemptKey(newIdempotencyKey())}>Start a fresh attempt</button>
+            </div>
+          )}
+          <button className="btn btn-solid btn-block" type="submit" disabled={submitting}>
+            {submitting ? 'Saving your order…' : `Place order — ${formatINR(cart.subtotalInr)}`}
+          </button>
+          {!user && (
+            <p className="muted" style={{ fontSize: '0.8rem', marginTop: 14, textAlign: 'center' }}>
+              <Link to="/login">Sign in</Link> first so your order is saved to your account history.
+            </p>
+          )}
         </form>
 
         <aside className="summary-card">
@@ -213,6 +280,167 @@ export function CheckoutPage() {
           <div className="summary-row summary-total"><span>Total</span><span>{formatINR(cart.subtotalInr)}</span></div>
         </aside>
       </div>
+    </div>
+  );
+}
+
+// ── Persistent order history (Phase 5) — RLS restricts rows to the signed-in customer ──
+
+const STATUS_LABELS: Record<string, string> = {
+  placed: 'Placed', in_production: 'In production', shipped: 'Shipped',
+  delivered: 'Delivered', cancelled: 'Cancelled', pending: 'Pending', paid: 'Paid', refunded: 'Refunded',
+};
+
+export function OrdersPage() {
+  const { user, loading } = useAuth();
+  const [orders, setOrders] = useState<OrderSummaryRow[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    fetchMyOrders()
+      .then((rows) => { if (!cancelled) setOrders(rows); })
+      .catch((err) => { if (!cancelled) setError(err instanceof Error ? err.message : 'Could not load your orders.'); });
+    return () => { cancelled = true; };
+  }, [user]);
+
+  if (loading) return <div className="wrap empty-state"><p className="muted">Checking your account…</p></div>;
+  if (!user) {
+    return (
+      <div className="wrap empty-state">
+        <h1 className="headline">Your orders live in your account.</h1>
+        <p className="muted" style={{ maxWidth: '46ch', margin: '10px auto 0' }}>Sign in to see everything you have commissioned, with sizes, coating and totals exactly as purchased.</p>
+        <Link to="/login" className="btn btn-solid" style={{ marginTop: 22 }}>Sign in</Link>
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="wrap empty-state">
+        <h1 className="headline">We couldn't open your orders.</h1>
+        <p className="muted" role="alert" style={{ maxWidth: '46ch', margin: '10px auto 0' }}>{error}</p>
+        <Link to="/rugs" className="btn" style={{ marginTop: 22 }}>Back to the Archive</Link>
+      </div>
+    );
+  }
+  if (orders === null) {
+    return <div className="wrap empty-state"><p className="muted">Loading your orders…</p></div>;
+  }
+  if (orders.length === 0) {
+    return (
+      <div className="wrap empty-state">
+        <p className="eyebrow">Order history</p>
+        <h1 className="headline" style={{ marginTop: 10 }}>No commissions yet.</h1>
+        <p className="muted">When you place an order it will appear here — saved exactly as purchased.</p>
+        <Link to="/rugs" className="btn btn-solid" style={{ marginTop: 22 }}>Explore the Archive</Link>
+      </div>
+    );
+  }
+  return (
+    <div className="wrap section">
+      <p className="eyebrow">Account</p>
+      <h1 className="display" style={{ marginBlock: '10px 30px' }}>Your orders</h1>
+      <div className="orders-list">
+        {orders.map((o) => (
+          <Link key={o.id} to={`/orders/${o.id}`} className="order-row">
+            <div>
+              <p className="subhead" style={{ fontSize: '1rem' }}>#{o.id.slice(0, 8).toUpperCase()}</p>
+              <p className="card-meta">{new Date(o.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+            </div>
+            <div className="order-row-mid">
+              <span className={`order-status order-status-${o.status}`}>{STATUS_LABELS[o.status] ?? o.status}</span>
+              <span className="card-meta">Payment: {STATUS_LABELS[o.payment_status] ?? o.payment_status}</span>
+            </div>
+            <strong>{formatPaise(o.total_paise)}</strong>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function OrderDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const { user, loading } = useAuth();
+  const [state, setState] = useState<{ order: OrderDetailRow; items: OrderItemRow[] } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user || !id) return;
+    let cancelled = false;
+    fetchMyOrder(id)
+      .then((res) => { if (!cancelled) setState(res); })
+      .catch((err) => { if (!cancelled) setError(err instanceof Error ? err.message : 'Could not load this order.'); });
+    return () => { cancelled = true; };
+  }, [user, id]);
+
+  if (loading) return <div className="wrap empty-state"><p className="muted">Checking your account…</p></div>;
+  if (!user) {
+    return (
+      <div className="wrap empty-state">
+        <h1 className="headline">Sign in to view this order.</h1>
+        <Link to="/login" className="btn btn-solid" style={{ marginTop: 20 }}>Sign in</Link>
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="wrap empty-state">
+        <h1 className="headline">That order isn't available.</h1>
+        <p className="muted" role="alert" style={{ maxWidth: '46ch', margin: '10px auto 0' }}>{error}</p>
+        <Link to="/orders" className="btn" style={{ marginTop: 20 }}>All my orders</Link>
+      </div>
+    );
+  }
+  if (!state) return <div className="wrap empty-state"><p className="muted">Loading the order…</p></div>;
+  const { order, items } = state;
+  return (
+    <div className="wrap section">
+      <p className="eyebrow">Order #{order.id.slice(0, 8).toUpperCase()}</p>
+      <h1 className="display" style={{ marginBlock: '10px 8px' }}>Commission details</h1>
+      <p className="muted" style={{ marginBottom: 30 }}>
+        Placed {new Date(order.created_at).toLocaleString('en-IN')} · Status:{' '}
+        <span className={`order-status order-status-${order.status}`}>{STATUS_LABELS[order.status] ?? order.status}</span>{' '}
+        · Payment: {STATUS_LABELS[order.payment_status] ?? order.payment_status}
+      </p>
+      <div className="orders-detail-grid">
+        <div>
+          {items.map((it) => (
+            <div className="order-item" key={it.id}>
+              <div>
+                <p className="subhead" style={{ fontSize: '1rem' }}>{it.product_name}</p>
+                <p className="card-meta">
+                  {it.size_label}{it.is_custom_size ? ' · custom size' : ''} · qty {it.quantity}
+                  {it.colour_name ? ` · ${it.colour_name.replace(/-/g, ' ')}` : ''}
+                </p>
+                {it.note && <p className="muted" style={{ fontSize: '0.8rem', marginTop: 6 }}>{it.note}</p>}
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <strong>{formatPaise(it.line_total_paise)}</strong>
+                <p className="card-meta">{formatPaise(it.unit_price_paise)} each</p>
+                {it.coating && (
+                  <p className="card-meta">+ coating {formatPaise(it.coating_charge_paise * it.quantity)}</p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+        <aside className="summary-card">
+          <h2 className="subhead" style={{ marginBottom: 14 }}>Summary</h2>
+          <div className="summary-row"><span>Rugs subtotal</span><span>{formatPaise(order.items_subtotal_paise)}</span></div>
+          {order.coating_subtotal_paise > 0 && (
+            <div className="summary-row"><span>Stain-resistant coating</span><span>+{formatPaise(order.coating_subtotal_paise)}</span></div>
+          )}
+          <div className="summary-row"><span>Shipping</span><span>Included</span></div>
+          <div className="summary-row summary-total"><span>Total</span><span>{formatPaise(order.total_paise)}</span></div>
+          <h3 className="subhead" style={{ margin: '20px 0 8px', fontSize: '1rem' }}>Delivery to</h3>
+          <p className="muted" style={{ fontSize: '0.85rem', lineHeight: 1.6 }}>
+            {order.full_name}<br />{order.address}<br />{order.city} — {order.pin}<br />{order.email}
+          </p>
+        </aside>
+      </div>
+      <Link to="/orders" className="btn" style={{ marginTop: 24 }}>All my orders</Link>
     </div>
   );
 }

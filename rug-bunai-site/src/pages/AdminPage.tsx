@@ -1,6 +1,10 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
+import {
+  ORDER_STATUSES, fetchAllOrders, fetchMyOrderForAdmin, formatPaise, setOrderStatus,
+  type OrderDetailRow, type OrderItemRow, type OrderStatus,
+} from '../lib/orders';
 import { useCatalog, type CatalogProduct } from '../lib/catalog';
 import { CARPET_CATEGORIES, COLORS } from '../data/vocabularies';
 import { getProduct, type Product } from '../data/products';
@@ -742,7 +746,7 @@ function HomepageProductsEditor({ onUpload }: { onUpload: (file: File) => Promis
 
 /** Admin Studio — product management + full website content management. */
 export default function AdminPage() {
-  const [tab, setTab] = useState<'products' | 'homepage' | 'collections' | 'product-content' | 'shared'>('products');
+  const [tab, setTab] = useState<'products' | 'homepage' | 'collections' | 'product-content' | 'orders' | 'shared'>('products');
   const { profile, configured } = useAuth();
   const { products, loading, uploadProductPhoto, createManagedProduct, removeProduct, changeProductPhoto, saveProductColours } = useCatalog();
   const [form, setForm] = useState(initialForm);
@@ -871,6 +875,7 @@ export default function AdminPage() {
           ['homepage', 'Homepage'],
           ['collections', 'Collections'],
           ['product-content', 'Product pages'],
+          ['orders', 'Orders'],
           ['shared', 'Shared & footer'],
         ] as const).map(([key, label]) => (
           <button key={key} role="tab" aria-selected={tab === key} className={`tab ${tab === key ? 'active' : ''}`} onClick={() => setTab(key)}>
@@ -949,7 +954,104 @@ export default function AdminPage() {
       {tab === 'homepage' && <div className="studio-panel" style={{ marginTop: 30 }}><HomepageContentEditor onUpload={uploadProductPhoto} /></div>}
       {tab === 'collections' && <div className="studio-panel" style={{ marginTop: 30 }}><CollectionsEditor onUpload={uploadProductPhoto} /></div>}
       {tab === 'product-content' && <div className="studio-panel" style={{ marginTop: 30 }}><ProductsContentTab /></div>}
+      {tab === 'orders' && <div className="studio-panel" style={{ marginTop: 30 }}><AdminOrdersPanel /></div>}
       {tab === 'shared' && <div className="studio-panel" style={{ marginTop: 30 }}><SharedContentEditor /></div>}
+    </div>
+  );
+}
+
+
+// ── Admin order management (Phase 6) ───────────────────────────────────────
+// Reads are RLS-restricted to verified admins; status changes go through the
+// guarded update_order_status() function. Payment status is display-only —
+// nothing here can mark an order paid until a real payment exists.
+
+function AdminOrdersPanel() {
+  const [orders, setOrders] = useState<(OrderDetailRow & { customer_id: string })[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<{ order: OrderDetailRow; items: OrderItemRow[] } | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [statusMsg, setStatusMsg] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    fetchAllOrders()
+      .then((rows) => setOrders(rows))
+      .catch((err) => setError(err instanceof Error ? err.message : 'Could not load orders.'));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    if (!openId) { setDetail(null); return; }
+    let cancelled = false;
+    fetchMyOrderForAdmin(openId)
+      .then((res) => { if (!cancelled) setDetail(res); })
+      .catch(() => { if (!cancelled) setDetail(null); });
+    return () => { cancelled = true; };
+  }, [openId]);
+
+  const changeStatus = async (orderId: string, status: OrderStatus) => {
+    setBusyId(orderId);
+    setStatusMsg(null);
+    try {
+      await setOrderStatus(orderId, status);
+      setStatusMsg(`Order #${orderId.slice(0, 8)} → ${status.replace('_', ' ')}.`);
+      load();
+    } catch (err) {
+      setStatusMsg(err instanceof Error ? err.message : 'Could not update the order.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  if (error) return <p className="field-error" role="alert">{error} — has supabase/migrations/0005_orders.sql been applied?</p>;
+  if (orders === null) return <p className="muted">Loading orders…</p>;
+  if (orders.length === 0) return <p className="muted">No orders yet. They will appear here as soon as customers check out.</p>;
+
+  return (
+    <div>
+      <h2 className="subhead" style={{ marginBottom: 16 }}>Customer orders</h2>
+      <div className="admin-orders-list">
+        {orders.map((o) => (
+          <div key={o.id} className="admin-order-row">
+            <button className="admin-order-main" onClick={() => setOpenId(openId === o.id ? null : o.id)}>
+              <span>#{o.id.slice(0, 8).toUpperCase()}</span>
+              <span>{new Date(o.created_at).toLocaleString('en-IN')}</span>
+              <span>{o.full_name} · {o.city}</span>
+              <span className={`order-status order-status-${o.status}`}>{o.status.replace('_', ' ')}</span>
+              <strong>{formatPaise(o.total_paise)}</strong>
+            </button>
+            <label className="admin-order-status">
+              Status{' '}
+              <select
+                value={o.status}
+                disabled={busyId === o.id}
+                onChange={(e) => changeStatus(o.id, e.target.value as OrderStatus)}
+              >
+                {ORDER_STATUSES.map((st) => <option key={st} value={st}>{st.replace('_', ' ')}</option>)}
+              </select>
+            </label>
+          </div>
+        ))}
+      </div>
+      {statusMsg && <p className="muted" role="status" style={{ marginTop: 12 }}>{statusMsg}</p>}
+      {openId && detail && (
+        <div className="admin-order-detail" style={{ marginTop: 20 }}>
+          <h3 className="subhead">Order #{openId.slice(0, 8).toUpperCase()} — payment: {detail.order.payment_status}</h3>
+          {detail.items.map((it) => (
+            <p key={it.id} className="card-meta" style={{ margin: '8px 0' }}>
+              {it.product_name} · {it.size_label} · qty {it.quantity}
+              {it.coating ? ` · coating +${formatPaise(it.coating_charge_paise * it.quantity)}` : ''}
+              {' '}— {formatPaise(it.line_total_paise)}
+              {it.note ? ` (${it.note})` : ''}
+            </p>
+          ))}
+          <p className="muted" style={{ fontSize: '0.8rem', marginTop: 10 }}>
+            Deliver to {detail.order.full_name}, {detail.order.address}, {detail.order.city} — {detail.order.pin} · {detail.order.email}
+          </p>
+        </div>
+      )}
     </div>
   );
 }
