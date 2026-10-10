@@ -46,13 +46,16 @@ export const EMPTY_FACETS: FacetState = {
 const csv = (s: string) => (s ? s.split(',').filter(Boolean) : []);
 
 export function facetsFromSearch(sp: URLSearchParams): FacetState {
+  // Validate the raw URL value against the curated vocabulary so unknown or
+  // stale slugs degrade to "no category filter" instead of an empty grid.
+  const rawCategory = sp.get('category');
   return {
     techniques: csv(sp.get('tech') ?? ''),
     materials: csv(sp.get('material') ?? ''),
     colors: csv(sp.get('color') ?? ''),
     rooms: csv(sp.get('room') ?? ''),
     styles: csv(sp.get('style') ?? ''),
-    categorySlug: sp.get('category'),
+    categorySlug: rawCategory && findCarpetCategory(rawCategory) ? rawCategory : null,
     sizeBucket: sp.get('size'),
     priceMin: sp.get('min') ? Number(sp.get('min')) : null,
     priceMax: sp.get('max') ? Number(sp.get('max')) : null,
@@ -101,7 +104,13 @@ const matchesExceptColor = (p: Product, f: FacetState): boolean => {
   if (f.materials.length && !f.materials.includes(p.materialSlug)) return false;
   if (f.rooms.length && !f.rooms.some((r) => p.roomSlugs.includes(r))) return false;
   if (f.styles.length && !f.styles.some((s) => p.styleSlugs.includes(s))) return false;
-  if (f.categorySlug && !p.categoryPaths.includes(carpetCategoryPath(f.categorySlug))) return false;
+  // Curated design category: a product matches when its categoryPaths contain
+  // the canonical path for the slug. Tolerant of slugs arriving with either
+  // '-' or '/' separators so URL/serialized values round-trip reliably.
+  if (f.categorySlug) {
+    const wanted = carpetCategoryPath(f.categorySlug.replace(/\//g, '-'));
+    if (!p.categoryPaths.includes(wanted)) return false;
+  }
   if (f.query.trim()) {
     const q = f.query.toLowerCase();
     const hay = `${p.name} ${p.tagline} ${p.description} ${p.craftStory}`.toLowerCase();

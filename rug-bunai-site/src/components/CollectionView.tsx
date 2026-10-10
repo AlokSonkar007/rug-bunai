@@ -86,11 +86,15 @@ export function FilterPanel({
   setState: (next: FacetState) => void;
 }) {
   const toggle = (groupId: string, slug: string) => {
-    const key = groupId as 'techniques' | 'materials' | 'colors' | 'rooms' | 'styles';
     if (groupId === 'sizeBucket') {
       setState({ ...state, sizeBucket: state.sizeBucket === slug ? null : slug });
       return;
     }
+    if (groupId === 'categorySlug') {
+      setState({ ...state, categorySlug: state.categorySlug === slug ? null : slug });
+      return;
+    }
+    const key = groupId as 'techniques' | 'materials' | 'colors' | 'rooms' | 'styles';
     const cur = state[key];
     setState({ ...state, [key]: cur.includes(slug) ? cur.filter((x) => x !== slug) : [...cur, slug] });
   };
