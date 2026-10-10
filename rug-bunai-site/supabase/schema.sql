@@ -113,3 +113,28 @@ create policy "Admins replace product photos" on storage.objects
   for update using (bucket_id = 'product-images' and public.is_admin());
 create policy "Admins delete product photos" on storage.objects
   for delete using (bucket_id = 'product-images' and public.is_admin());
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- TASK 6: Site content management (homepage, collections, shared copy).
+-- Additive migration only — run this section once in Supabase SQL Editor.
+-- Existing records/tables are untouched; the app degrades gracefully to its
+-- bundled defaults if this table is missing.
+
+create table public.site_content (
+  id integer primary key default 1,
+  data jsonb not null,
+  updated_at timestamptz not null default now(),
+  constraint site_content_single_row check (id = 1)
+);
+
+alter table public.site_content enable row level security;
+
+-- Customers read the published content; only admins may write it.
+create policy "Anyone can read site content" on public.site_content
+  for select using (true);
+create policy "Admins manage site content" on public.site_content
+  for all using (public.is_admin()) with check (public.is_admin());
+
+-- Product text overrides (name/description/craft story/care copy) reuse the
+-- existing admin-protected product_overrides table via its JSON payload;
+-- managed_products already stores full product JSONB for added products.

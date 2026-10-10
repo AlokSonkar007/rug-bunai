@@ -5,7 +5,7 @@ import { useAuth } from '../lib/auth';
 import { CARPET_CATEGORIES, MATERIALS, ROOMS, TECHNIQUES } from '../data/vocabularies';
 import { rugImage } from '../lib/rugArt';
 import { getProduct } from '../data/products';
-import { CONTACT_PHONE_DISPLAY, WHATSAPP_TEL_HREF } from '../lib/siteContent';
+import { CONTACT_PHONE_DISPLAY, WHATSAPP_TEL_HREF, useSiteContent } from '../lib/siteContent';
 
 /** Desktop "Collections" mega-menu content — shared by hover panel & mobile drawer. */
 
@@ -82,6 +82,7 @@ export default function Layout() {
   const [searchOpen, setSearchOpen] = useState(false);
   const { count } = useCart();
   const { user, profile, signOut } = useAuth();
+  const { content: siteContent } = useSiteContent();
   const location = useLocation();
   const navigate = useNavigate();
   const searchRef = useRef<HTMLInputElement>(null);
@@ -132,7 +133,7 @@ export default function Layout() {
   return (
     <div className={`shell ${drawerOpen ? 'nav-open' : ''}`}>
       <a className="skip-link" href="#main">Skip to content</a>
-      <p className="topbar">Free shipping across India · Handwoven in Bhadohi since 1982</p>
+      <p className="topbar">{siteContent.topbar}</p>
 
       <header className={`site-header ${scrolled ? 'scrolled' : ''}`}>
         <div className="wrap header-grid">
@@ -330,66 +331,31 @@ export function WhatsAppFab() {
 }
 
 export function SiteFooter() {
+  const { content } = useSiteContent();
   return (
     <footer className="site-footer">
       <div className="wrap footer-grid">
         <div className="footer-brand">
           <p className="brand" style={{ marginBottom: 18 }}>Rug Bunai<small>Bhadohi Weaving House</small></p>
           <p className="muted" style={{ fontSize: '0.86rem', maxWidth: '34ch' }}>
-            Guardians of a weaving tradition older than any single family — each rug knotted, washed and finished by hand in Uttar Pradesh.
+            {content.footer.about}
           </p>
         </div>
-        <div className="footer-col">
-          <h4>Collections</h4>
-          <ul>
-            {CARPET_CATEGORIES.slice(0, 6).map((c) => (
-              <li key={c.slug}><Link to={`/collections/${c.slug}`}>{c.label}</Link></li>
-            ))}
-            <li><Link to="/rugs">All Rugs</Link></li>
-          </ul>
-        </div>
-        <div className="footer-col">
-          <h4>More Collections</h4>
-          <ul>
-            {CARPET_CATEGORIES.slice(6, 12).map((c) => (
-              <li key={c.slug}><Link to={`/collections/${c.slug}`}>{c.label}</Link></li>
-            ))}
-          </ul>
-        </div>
-        <div className="footer-col">
-          <h4>Finish &amp; Rooms</h4>
-          <ul>
-            <li><Link to="/rugs?tech=hand-knotted">Hand-Knotted</Link></li>
-            <li><Link to="/rugs?tech=hand-tufted">Hand-Tufted</Link></li>
-            <li><Link to="/rugs?tech=flat-woven">Flat-Woven</Link></li>
-            <li><Link to="/rugs?room=living-room">Living Room</Link></li>
-            <li><Link to="/rugs?room=bedroom">Bedroom</Link></li>
-            <li><Link to="/rugs?room=hallway">Hallways &amp; Runners</Link></li>
-          </ul>
-        </div>
-        <div className="footer-col">
-          <h4>Care &amp; Company</h4>
-          <ul>
-            <li><Link to="/story">Our Story</Link></li>
-            <li><Link to="/journal">Journal</Link></li>
-            <li><Link to="/contact">Contact</Link></li>
-          </ul>
-        </div>
-        <div className="footer-col">
-          <h4>Policies</h4>
-          <ul>
-            <li><Link to="/policies/privacy">Privacy Policy</Link></li>
-            <li><Link to="/policies/terms">Terms of Sale</Link></li>
-            <li><Link to="/policies/shipping">Shipping Policy</Link></li>
-            <li><Link to="/policies/returns">Returns &amp; Refunds</Link></li>
-            <li><Link to="/policies/faqs">FAQs</Link></li>
-          </ul>
-        </div>
+        {content.footerColumns.map((col) => (
+          <div className="footer-col" key={col.heading}>
+            <h4>{col.heading}</h4>
+            <ul>
+              {col.links.map((l) => (
+                <li key={`${col.heading}-${l.to}`}><Link to={l.to}>{l.label}</Link></li>
+              ))}
+            </ul>
+          </div>
+        ))}
       </div>
       <div className="wrap footer-base">
         <span>Rug Bunai · Bhadohi, Uttar Pradesh, India — 221401</span>
         <span>
-          <a href={WHATSAPP_TEL_HREF} style={{ letterSpacing: '0.12em' }}>{CONTACT_PHONE_DISPLAY}</a>
+          <a href={WHATSAPP_TEL_HREF} style={{ letterSpacing: '0.12em' }}>{content.footer.phone || CONTACT_PHONE_DISPLAY}</a>
         </span>
         <span>© {new Date().getFullYear()} Rug Bunai. All knots placed by hand.</span>
       </div>
