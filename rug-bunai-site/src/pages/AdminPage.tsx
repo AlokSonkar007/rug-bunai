@@ -520,6 +520,8 @@ function ProductContentEditor({ product, onUpload }: { product: CatalogProduct; 
     description: ov.description ?? product.description ?? '',
     craftStory: ov.craftStory ?? product.craftStory ?? base?.craftStory ?? '',
     care: ov.specs?.careInstructions ?? careDefault,
+    specNotes: ov.specNotes ?? '',
+    customRate: product.customRatePerSqFt != null ? String(product.customRatePerSqFt) : '',
   };
   const [draft, setDraft] = useState(draftInitial);
   const [busy, setBusy] = useState(false);
@@ -529,6 +531,12 @@ function ProductContentEditor({ product, onUpload }: { product: CatalogProduct; 
   const dirty = JSON.stringify(draft) !== JSON.stringify(draftInitial);
   const saveAll = async () => {
     if (!draft.name.trim()) { setMsg({ kind: 'err', text: 'Product name cannot be empty.' }); return; }
+    const rateTrimmed = draft.customRate.trim();
+    const rateNum = rateTrimmed === '' ? null : Number(rateTrimmed);
+    if (rateNum !== null && (!Number.isFinite(rateNum) || rateNum <= 0)) {
+      setMsg({ kind: 'err', text: 'Custom ₹/sq ft rate must be a positive number (leave blank to derive from the rug\u2019s own prices).' });
+      return;
+    }
     setBusy(true);
     setMsg(null);
     try {
@@ -538,6 +546,8 @@ function ProductContentEditor({ product, onUpload }: { product: CatalogProduct; 
         description: draft.description,
         craftStory: draft.craftStory,
         specs: { careInstructions: draft.care },
+        specNotes: draft.specNotes,
+        customRatePerSqFt: rateNum,
       };
       await saveProductText(product.slug, text);
       setMsg({ kind: 'ok', text: 'Product content saved.' });
@@ -562,6 +572,11 @@ function ProductContentEditor({ product, onUpload }: { product: CatalogProduct; 
         <textarea id={`pc-${product.slug}-craft`} rows={4} value={draft.craftStory} onChange={(e) => setDraft({ ...draft, craftStory: e.target.value })} /></div>
       <div className="field"><label htmlFor={`pc-${product.slug}-care`}>Care instructions</label>
         <textarea id={`pc-${product.slug}-care`} rows={3} value={draft.care} onChange={(e) => setDraft({ ...draft, care: e.target.value })} /></div>
+      <div className="field"><label htmlFor={`pc-${product.slug}-specnotes`}>Specifications — extra notes (optional)</label>
+        <textarea id={`pc-${product.slug}-specnotes`} rows={2} value={draft.specNotes} placeholder="Shown as an additional row in the Specifications table on this product's page." onChange={(e) => setDraft({ ...draft, specNotes: e.target.value })} /></div>
+      <div className="field" style={{ maxWidth: 260 }}><label htmlFor={`pc-${product.slug}-rate`}>Custom size ₹ per sq ft (optional)</label>
+        <input id={`pc-${product.slug}-rate`} type="number" min={1} step={1} inputMode="numeric" value={draft.customRate} placeholder="e.g. 4600" onChange={(e) => setDraft({ ...draft, customRate: e.target.value })} />
+        <span className="muted" style={{ fontSize: '0.74rem', marginTop: 4 }}>Used to price standard sizes without a configured offer and custom-size estimates. Leave blank to derive from this rug's own prices.</span></div>
       <ImageEditor
         idPrefix={`pc-${product.slug}`}
         label="Main product photo"

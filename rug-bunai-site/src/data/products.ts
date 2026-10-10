@@ -94,6 +94,13 @@ export interface Product {
   readonly categoryPaths: readonly string[];
   readonly specs: Specifications;
   readonly variants: readonly Variant[];
+  /**
+   * Admin-configured ₹ per square foot for this design (Studio > Product
+   * Pages). Trusted source for pricing standard sizes that have no explicit
+   * offer record and for custom-size estimates. Optional — when absent the
+   * rate is derived from the rug's own priced variants, never invented.
+   */
+  readonly customRatePerSqFt?: number | null;
   readonly rating: number; // 0..5
   readonly reviewsCount: number;
   readonly bestSellerRank?: number;
