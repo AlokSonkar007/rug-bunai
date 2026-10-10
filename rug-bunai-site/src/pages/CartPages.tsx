@@ -99,6 +99,7 @@ export function CartPage() {
 // ── Frictionless three-step checkout (Apple-style: minimal steps, retained info) ──
 
 type Errors = Partial<Record<'email' | 'name' | 'phone' | 'address' | 'city' | 'pin', string>>;
+type Errors = Partial<Record<'email' | 'name' | 'address' | 'city' | 'pin', string>>;
 
 export function CheckoutPage() {
   const cart = useCart();
@@ -204,6 +205,8 @@ export function CheckoutPage() {
         <p className="muted" style={{ fontSize: '0.75rem', marginTop: 12 }}>
           Payment status: pending (COD). No online payment is taken now and no card details are
           stored by this website. Keep your order reference {placed.orderReference} handy.
+          Payment method: Cash on Delivery — pay in cash when your rug arrives.
+          Payment status: pending until delivery is confirmed. No card details are stored by this website.
         </p>
         <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 26, flexWrap: 'wrap' }}>
           <Link to="/orders" className="btn btn-solid">View my orders</Link>
@@ -274,6 +277,16 @@ export function CheckoutPage() {
             <input type="checkbox" checked={waConsent} onChange={(e) => setWaConsent(e.target.checked)} />
             <span>Send my order updates on WhatsApp at this number (optional — confirmations always go by email).</span>
           </label>
+          <hr className="rule" style={{ margin: '26px 0' }} />
+          <h2 className="subhead" style={{ marginBottom: 18 }}>Payment</h2>
+          <div className="cod-panel" role="group" aria-label="Payment method">
+            <p className="cod-title"><span aria-hidden="true">💵</span> Cash on Delivery</p>
+            <p className="muted" style={{ fontSize: '0.82rem', margin: 0 }}>
+              Pay in cash when your rug arrives — nothing is charged now. Your order is recorded as
+              <strong> COD · payment pending</strong>; our team calls you to confirm the dispatch slot
+              and collect payment at delivery. No card details are collected or stored by this website.
+            </p>
+          </div>
           {serverError && (
             <div className="field-error" role="alert" style={{ marginBottom: 16 }}>
               {serverError}
@@ -282,6 +295,7 @@ export function CheckoutPage() {
           )}
           <button className="btn btn-solid btn-block" type="submit" disabled={submitting}>
             {submitting ? 'Saving your order…' : `Place COD order — ${formatINR(cart.subtotalInr)}`}
+            {submitting ? 'Saving your order…' : `Place order — ${formatINR(cart.subtotalInr)} (Cash on Delivery)`}
           </button>
           {!user && (
             <p className="muted" style={{ fontSize: '0.8rem', marginTop: 14, textAlign: 'center' }}>

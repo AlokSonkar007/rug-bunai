@@ -14,7 +14,7 @@ export interface SizeOption {
   readonly custom?: boolean;
 }
 
-const CM_PER_FT = 30.48;
+export const CM_PER_FT = 30.48;
 
 const build = (key: string, w: number, l: number): SizeOption => ({
   key,

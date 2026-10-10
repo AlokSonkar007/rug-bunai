@@ -366,4 +366,39 @@ export async function retryNotification(jobId: string): Promise<void> {
   if (!supabase) throw new Error('Supabase is not configured.');
   const { error } = await supabase.rpc('retry_order_notification', { p_id: jobId });
   if (error) throw new Error(`Could not requeue the notification: ${error.message}`);
+/** Admin: confirm the COD cash has physically been received. Server-side RPC
+ *  (0008) enforces admin-only access and refuses double-collection. */
+export async function markCodCollected(orderId: string): Promise<void> {
+  if (!supabase) throw new Error('Supabase is not configured.');
+  const { error } = await supabase.rpc('mark_cod_collected', { p_order_id: orderId });
+  if (error) throw new Error(`Could not record the cash collection: ${error.message}`);
+}
+
+/** Per-recipient delivery state of the order's email/WhatsApp notifications
+ *  (outbox rows from migration 0007). Returns [] when the outbox migration
+ *  hasn't been applied yet so the Studio degrades gracefully. */
+export type NotificationJobRow = {
+  id: string;
+  recipient_kind: 'customer' | 'admin';
+  channel: 'email' | 'whatsapp';
+  destination: string;
+  status: 'pending' | 'sending' | 'sent' | 'failed' | 'skipped';
+  attempts: number;
+  last_error: string | null;
+  provider_message_id: string | null;
+  next_attempt_at: string;
+};
+
+export async function fetchOrderNotifications(orderIds: string[]): Promise<Record<string, NotificationJobRow[]>> {
+  if (!supabase || orderIds.length === 0) return {};
+  const { data, error } = await supabase
+    .from('order_notifications')
+    .select('id, order_id, recipient_kind, channel, destination, status, attempts, last_error, provider_message_id, next_attempt_at')
+    .in('order_id', orderIds.slice(0, 50));
+  if (error) return {}; // outbox table not created yet — non-fatal for the panel
+  const grouped: Record<string, NotificationJobRow[]> = {};
+  for (const row of (data ?? []) as (NotificationJobRow & { order_id: string })[]) {
+    (grouped[row.order_id] ??= []).push(row);
+  }
+  return grouped;
 }

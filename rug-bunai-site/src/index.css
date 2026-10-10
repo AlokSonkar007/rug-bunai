@@ -331,7 +331,7 @@ html, body { max-width: 100%; overflow-x: clip; }
   grid-template-columns: repeat(4, 1fr);
   gap: 18px;
 }
-.tiles.rooms { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: clamp(10px, 1.4vw, 18px); }
+.tiles.rooms { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(10px, 1.4vw, 18px); }
 .tile {
   position: relative; overflow: hidden;
   aspect-ratio: 3/4;
@@ -835,7 +835,17 @@ html, body { max-width: 100%; overflow-x: clip; }
 .mega-panel::before { content: ''; position: absolute; top: -30px; left: 0; right: 0; height: 30px; }
 @keyframes megaIn { from { opacity: 0; transform: translateX(-50%) translateY(10px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
 
-.mega-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: clamp(20px, 3vw, 44px); text-align: left; }
+/* Explicit CSS Grid tracks — each group owns its own column and can never
+   intrude into a neighbour's space. `min-width: 0` lets long labels wrap
+   instead of pushing the technique/material columns sideways. */
+.mega-grid {
+  display: grid;
+  grid-template-columns: minmax(300px, 1.7fr) minmax(150px, 1fr) minmax(150px, 1fr) minmax(150px, 1fr);
+  gap: clamp(24px, 3vw, 48px);
+  align-items: start;
+  text-align: left;
+}
+.mega-col { min-width: 0; }
 .mega-col ul { margin-top: 14px; }
 .mega-col li { margin-bottom: 8px; }
 .mega-col a {
@@ -844,24 +854,24 @@ html, body { max-width: 100%; overflow-x: clip; }
 }
 .mega-col a:hover { color: var(--umber); transform: translateX(4px); }
 
-/* Design-category block inside the mega panel — spans two grid columns so
-   15 categories stay scannable without making the menu excessively tall. */
-.mega-wide { grid-column: span 2; }
-.mega-cat-cols { display: grid; grid-template-columns: 1fr 1fr; column-gap: clamp(18px, 2.4vw, 36px); }
-.mega-cat-cols ul { margin-top: 14px; }
+/* Design-category block inside the mega panel — its own internal two-column
+   grid, fully contained within the wide track above. */
+.mega-wide { grid-column: 1; }
+.mega-cat-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: clamp(18px, 2.4vw, 36px); }
+.mega-cat-cols ul { margin-top: 14px; min-width: 0; }
 .mega-cat-cols a { font-size: 0.84rem; }
 .mega-view-all { margin-top: 14px; }
 .mega-view-all a { font-size: 0.78rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--umber); }
 
 @media (max-width: 1100px) {
-  /* Keep the panel inside the viewport on narrower desktops: 3 columns,
-     category block full-width across the top. */
+  /* Keep the panel inside the viewport on narrower desktops: 3 explicit
+     tracks, category block full-width across the top. */
   .mega-panel { min-width: min(760px, 92vw); }
-  .mega-grid { grid-template-columns: repeat(3, 1fr); }
+  .mega-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .mega-wide { grid-column: 1 / -1; }
 }
 @media (max-width: 780px) {
-  .mega-grid { grid-template-columns: repeat(2, 1fr); }
+  .mega-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .mega-feature { display: none; }
 }
 .mega-feature { display: flex; }
@@ -1295,3 +1305,12 @@ html, body { max-width: 100%; overflow-x: clip; }
   .orders-detail-grid { grid-template-columns: 1fr; }
   .order-row { gap: 10px; }
 }
+
+/* ── COD checkout panel ─────────────────────────────────────────────────── */
+.cod-panel {
+  border: 1px solid var(--line);
+  background: var(--paper-warm, #f6efe7);
+  padding: clamp(14px, 2vw, 20px);
+  margin-bottom: 20px;
+}
+.cod-title { font-weight: 500; letter-spacing: 0.02em; margin: 0 0 6px; }

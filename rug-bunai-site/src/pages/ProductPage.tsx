@@ -153,6 +153,14 @@ export default function ProductPage() {
     if (priced.length === 0) return null;
     return customEstimateInr(Math.min(...priced), customDims.w, customDims.l);
   }, [product, customDims]);
+  /** Price from this rug's trusted ₹/sq-ft rate (admin-configured rate first,
+   *  else derived from its own priced offers) × the requested area.
+   *  The studio confirms before production — no invented markup, no silent
+   *  fallback to a standard-size price. */
+  const customEstimate = useMemo(() => {
+    if (!product || !customDims.valid || ratePerSqFt == null) return null;
+    return Math.round(ratePerSqFt * customDims.w * customDims.l);
+  }, [product, customDims, ratePerSqFt]);
 
   // ── Stain-resistant coating (optional add-on, ₹90/sq ft — sizes.ts rate) ──
   // Charge is ALWAYS derived from the actual selected numeric dimensions —
