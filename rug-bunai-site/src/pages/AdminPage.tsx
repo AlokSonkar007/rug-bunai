@@ -256,10 +256,11 @@ function ImageEditor({
     setMsg(null);
     try {
       // Reuse the existing admin-validated Supabase storage upload path.
+      setMsg({ kind: 'ok', text: 'Uploaded to storage — saving homepage content…' });
       const url = await onUpload(file);
       await onSave(url);
       setFile(null);
-      setMsg({ kind: 'ok', text: 'Image uploaded and saved.' });
+      setMsg({ kind: 'ok', text: 'Saved — the homepage now shows this image.' });
     } catch (reason) {
       setMsg({ kind: 'err', text: reason instanceof Error ? `${reason.message} The previous image is still live.` : 'Upload failed. The previous image is still live.' });
     } finally {
@@ -321,7 +322,7 @@ function HeroSlidesEditor({ onUpload }: { onUpload: (file: File) => Promise<stri
   return (
     <div className="summary-card" style={{ padding: 18 }}>
       <div className="axis-head" style={{ marginBottom: 14 }}>
-        <h3 className="subhead">Hero slideshow</h3>
+        <h3 className="subhead">Hero slideshow — editing Slide {idx + 1} of {content.heroSlides.length}</h3>
         <div role="tablist" aria-label="Choose hero slide" style={{ display: 'flex', gap: 8 }}>
           {content.heroSlides.map((_, i) => (
             <button key={i} role="tab" aria-selected={i === idx} className={`tab ${i === idx ? 'active' : ''}`} onClick={() => setIdx(i)}>
@@ -342,7 +343,7 @@ function HeroSlidesEditor({ onUpload }: { onUpload: (file: File) => Promise<stri
         label="Hero image"
         currentUrl={slide.imageUrl}
         fallbackSrc={rugImage(getProduct(slide.productSlug) ?? ({} as never), 4, 320, 200)}
-        note="Leave unset to keep the generated rug artwork for this design."
+        note="This photo replaces the hero background of Slide " + (idx + 1) + " on the homepage directly. Leave unset to keep the generated rug artwork for this design. (The separate “Homepage Products” control below only changes a product's rail/hero-seed photo — it does not set a slide's image.)"
         onUpload={onUpload}
         onSave={async (url) => { await patchSlide({ imageUrl: url }); }}
       />

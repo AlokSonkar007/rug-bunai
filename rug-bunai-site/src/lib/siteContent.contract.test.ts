@@ -65,13 +65,19 @@ describe('frontend store contract (what the SQL must support)', () => {
   it('the store targets table `site_content`, row id 1, column `data`', () => {
     expect(STORE_TSX).toContain(".from('site_content')");
     expect(STORE_TSX).toContain(".select('data').eq('id', 1)");
-    expect(STORE_TSX).toContain('.insert({ id: 1, data: payload })');
-    expect(STORE_TSX).toContain('update({ data: payload, updated_at: new Date().toISOString() })');
+    // The insert/update payload variable is named `stamped` (it carries the
+    // _rev/_savedAt concurrency stamps) — assert the shape, not the literal.
+    expect(STORE_TSX).toMatch(/\.insert\(\{ id: 1, data: \w+ \}\)/);
+    expect(STORE_TSX).toMatch(/update\(\{ data: \w+, updated_at: new Date\(\)\.toISOString\(\) \}\)/);
   });
 
   it('homepage images persist inside the JSONB payload (no extra columns needed)', () => {
     // saveProductHomeImage stores homeImageUrl inside productOverrides → data jsonb.
     expect(STORE_TSX).toContain('homeImageUrl');
-    expect(STORE_TSX).toMatch(/const payload = \{ \.\.\.next, productOverrides: overrides \}/);
+    // The exact save-payload shape now includes optimistic-concurrency stamps
+    // (_rev/_savedAt) alongside productOverrides — assert both halves persist
+    // inside the single JSONB row rather than pinning one literal line.
+    expect(STORE_TSX).toMatch(/productOverrides: overrides/);
+    expect(STORE_TSX).toMatch(/_rev/);
   });
 });

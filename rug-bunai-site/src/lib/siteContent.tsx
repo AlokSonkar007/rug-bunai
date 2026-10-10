@@ -7,7 +7,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import {
-  createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode,
+  createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode,
 } from 'react';
 import type { Product } from '../data/products';
 import { supabase } from './supabase';
@@ -207,7 +207,10 @@ function deepMerge<T>(base: T, patch: unknown): T {
   if (isPlainObject(base)) {
     const out: Rec = { ...(base as unknown as Rec) };
     for (const [k, v] of Object.entries(patch)) {
-      out[k] = k in out ? deepMerge(out[k], v) : v;
+      // Arrays REPLACE wholesale — a saved heroSlides/roomTiles array must
+      // never be element-merged into the defaults (that silently dropped
+      // hydrated image URLs and other per-slide values).
+      out[k] = Array.isArray(v) || !(k in out) ? v : deepMerge(out[k], v);
     }
     return out as unknown as T;
   }
@@ -216,8 +219,44 @@ function deepMerge<T>(base: T, patch: unknown): T {
 
 // ── Persistence keys / helpers ────────────────────────────────────────────────
 
-const LS_KEY = 'rugbunai-site-content-v1';
-const LS_OVERRIDES = 'rugbunai-product-overrides-v1';
+export const LS_KEY = 'rugbunai-site-content-v1';
+export const LS_OVERRIDES = 'rugbunai-product-overrides-v1';
+
+/** The `site_content.data` JSONB payload: the SiteContent object plus the
+ *  homepage-only product photo/text overrides stored alongside it. */
+export type StoredSitePayload = Partial<SiteContent> & { productOverrides?: ProductOverrideMap };
+
+/** A site_content.data payload as stored: the SiteContent object, the
+ *  homepage-only product overrides, and the optimistic-concurrency stamps. */
+export type StoredSiteRecord = Record<string, unknown>;
+
+/** Split a persisted payload into (content, overrides) merged over defaults.
+ *  Shared by hydration and save-time reload so the two paths can never drift —
+ *  notably, `productOverrides` must be restored on every read path, not just
+ *  when saving from the Studio. */
+export function splitStoredPayload(saved: StoredSiteRecord | null | undefined): [SiteContent, ProductOverrideMap] {
+  if (!saved) return [DEFAULT_CONTENT, {}];
+  const { productOverrides: ov, _rev: _r, _savedAt: _s, ...rest } = saved;
+  return [deepMerge(DEFAULT_CONTENT, rest), (ov ?? {}) as ProductOverrideMap];
+}
+
+// ── Stale-write guard ─────────────────────────────────────────────────────────
+// Every successful write to site_content.data stamps `_rev` (monotonic counter)
+// and `_savedAt`. Writes are sent with `.eq('data->>_rev', <expected>)` so the
+// update matches zero rows if another session changed the content after it was
+// read (Postgres evaluates the WHERE clause against the current row). The
+// client then re-reads and merges instead of clobbering the newer content.
+const REV_KEY = '_rev';
+const SAVED_AT_KEY = '_savedAt';
+
+function revOf(payload: StoredSiteRecord): number {
+  const v = payload[REV_KEY];
+  return typeof v === 'number' && Number.isFinite(v) ? v : 0;
+}
+
+function withStamp(payload: StoredSiteRecord, baseRev: number): StoredSiteRecord {
+  return { ...payload, [SAVED_AT_KEY]: new Date().toISOString(), [REV_KEY]: baseRev + 1 };
+}
 
 /**
  * Editable product text. `specs` patches only the copy fields inside the
@@ -239,7 +278,7 @@ function readLS<T>(key: string, fallback: T): T {
 
 // ── Context ───────────────────────────────────────────────────────────────────
 
-type SiteContentCtx = {
+export type SiteContentCtx = {
   content: SiteContent;
   /** Admin-only: full catalogue including hidden entries, with text/image overrides applied. */
   productOverrides: ProductOverrideMap;
@@ -256,7 +295,8 @@ type SiteContentCtx = {
   saving: boolean;
 };
 
-const Ctx = createContext<SiteContentCtx | null>(null);
+export const CtxForTest = createContext<SiteContentCtx | null>(null);
+const Ctx = CtxForTest;
 
 export function SiteContentProvider({ children }: { children: ReactNode }) {
   const [content, setContent] = useState<SiteContent>(() =>
@@ -264,6 +304,13 @@ export function SiteContentProvider({ children }: { children: ReactNode }) {
   const [productOverrides, setProductOverrides] = useState<ProductOverrideMap>(() =>
     readLS<ProductOverrideMap>(LS_OVERRIDES, {}));
   const [saving, setSaving] = useState(false);
+  // Optimistic-concurrency anchor for site_content.data. Seeded by hydration,
+  // advanced by every successful write. `null` = nothing read yet this session.
+  const revRef = useRef<number | null>(null);
+  // True once a save completes in this session. Hydration may only take over
+  // the UI state while this is false — a slow initial Supabase response must
+  // never overwrite content the admin just saved successfully.
+  const savedThisSessionRef = useRef(false);
 
   // Hydrate from Supabase once (row with id 1), fall back silently.
   useEffect(() => {
@@ -272,29 +319,67 @@ export function SiteContentProvider({ children }: { children: ReactNode }) {
     void (async () => {
       try {
         const { data } = await supabase.from('site_content').select('data').eq('id', 1).maybeSingle();
-        const saved = (data as { data?: Partial<SiteContent> } | null)?.data;
-        if (!cancelled && saved) {
-          setContent(deepMerge(DEFAULT_CONTENT, saved));
-          localStorage.setItem(LS_KEY, JSON.stringify(saved));
-        }
+        const saved = (data as { data?: StoredSiteRecord } | null)?.data;
+        if (cancelled || !saved) return;
+        if (revRef.current === null) revRef.current = revOf(saved);
+        // Never clobber a save that already succeeded this session.
+        if (savedThisSessionRef.current) return;
+        const [nextContent, nextOverrides] = splitStoredPayload(saved);
+        setContent(nextContent);
+        setProductOverrides(nextOverrides);
+        localStorage.setItem(LS_KEY, JSON.stringify(nextContent));
+        localStorage.setItem(LS_OVERRIDES, JSON.stringify(nextOverrides));
       } catch { /* keep local copy */ }
     })();
     return () => { cancelled = true; };
   }, []);
 
-  const persist = useCallback(async (next: SiteContent, overrides: ProductOverrideMap) => {
+  /** Read row 1 and return its payload + revision. Throws on read failure so a
+   *  caller can never treat "could not read" as "no saved content". */
+  const fetchRow = useCallback(async (): Promise<{ payload: StoredSiteRecord | null; rev: number }> => {
+    if (!supabase) return { payload: null, rev: 0 };
+    const { data, error } = await supabase.from('site_content').select('data').eq('id', 1).maybeSingle();
+    if (error) throw new Error(`Could not read saved content: ${error.message}`);
+    const payload = ((data as { data?: StoredSiteRecord } | null)?.data) ?? null;
+    return { payload, rev: payload ? revOf(payload) : 0 };
+  }, []);
+
+  const persist = useCallback(async (next: SiteContent, overrides: ProductOverrideMap): Promise<void> => {
     setSaving(true);
     try {
       if (supabase) {
         // Shared persistence first — a failed write must NOT look like success.
-        const payload = { ...next, productOverrides: overrides };
-        const existing = await supabase.from('site_content').select('id').eq('id', 1).maybeSingle();
-        if (existing.error) throw new Error(`Could not read saved content: ${existing.error.message}`);
-        const { error } = existing.data
+        const baseRev = revRef.current ?? 0;
+        const stamped: StoredSiteRecord = withStamp(
+          { ...next, productOverrides: overrides } as unknown as StoredSiteRecord,
+          baseRev,
+        );
+        const existing = await fetchRow();
+        if (existing.payload && existing.rev > baseRev) {
+          // Another session saved since our last read — merge OUR intended
+          // change on top of their newer content instead of clobbering it.
+          const [freshContent, freshOverrides] = splitStoredPayload(existing.payload);
+          const merged = deepMerge(freshContent, next) as SiteContent;
+          const mergedOverrides: ProductOverrideMap = { ...freshOverrides };
+          for (const [k, v] of Object.entries(overrides)) mergedOverrides[k] = { ...mergedOverrides[k], ...v };
+          await persist(merged, mergedOverrides); // re-stamps at currentRev+1
+          return;
+        }
+        const { error } = existing.payload
+          // CAS: only update while data->>_rev still equals what we read. If a
+          // concurrent write landed between fetchRow and here, zero rows match
+          // — PostgREST does not report that as an error, so verify below.
           ? await supabase.from('site_content')
-              .update({ data: payload, updated_at: new Date().toISOString() }).eq('id', 1)
-          : await supabase.from('site_content').insert({ id: 1, data: payload });
+              .update({ data: stamped, updated_at: new Date().toISOString() })
+              .eq('id', 1).eq(`data->>${REV_KEY}`, String(existing.rev))
+          : await supabase.from('site_content').insert({ id: 1, data: stamped });
         if (error) throw new Error(`Could not save content: ${error.message}`);
+        // Confirm the write actually landed (a zero-match CAS surfaces here).
+        const after = await fetchRow();
+        if (!after.payload || revOf(after.payload) !== revOf(stamped)) {
+          throw new Error('Could not save content: another edit changed the homepage while saving. Please retry.');
+        }
+        revRef.current = revOf(after.payload);
       }
       // Local mirror only after a successful remote write (or when Supabase is
       // not configured at all — then the browser is the only available store).
@@ -302,27 +387,29 @@ export function SiteContentProvider({ children }: { children: ReactNode }) {
       localStorage.setItem(LS_OVERRIDES, JSON.stringify(overrides));
       setContent(next);
       setProductOverrides(overrides);
+      savedThisSessionRef.current = true;
     } finally {
       setSaving(false);
     }
-  }, []);
+  }, [fetchRow]);
 
   const loadPair = useCallback(async (): Promise<[SiteContent, ProductOverrideMap]> => {
     if (supabase) {
-      try {
-        const { data } = await supabase.from('site_content').select('data').eq('id', 1).maybeSingle();
-        const saved = (data as { data?: (Partial<SiteContent> & { productOverrides?: ProductOverrideMap }) } | null)?.data;
-        if (saved) {
-          const { productOverrides: ov, ...rest } = saved;
-          return [deepMerge(DEFAULT_CONTENT, rest), ov ?? {}];
-        }
-      } catch { /* fall through to local */ }
+      // Authoritative reload for save-time merging. A read failure must
+      // surface loudly — silently falling back to stale localStorage caused
+      // saves to be built on outdated content.
+      const { payload } = await fetchRow();
+      if (payload) {
+        revRef.current = revOf(payload);
+        return splitStoredPayload(payload);
+      }
+      revRef.current = 0; // no row yet — the first write will create it
     }
     return [
       deepMerge(DEFAULT_CONTENT, readLS<Partial<SiteContent>>(LS_KEY, {})),
       readLS<ProductOverrideMap>(LS_OVERRIDES, {}),
     ];
-  }, []);
+  }, [fetchRow]);
 
   const saveContent = useCallback(async (patch: Partial<SiteContent>) => {
     const [cur, ov] = await loadPair();
