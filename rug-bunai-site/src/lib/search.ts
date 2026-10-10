@@ -8,7 +8,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { PRODUCTS, priceRange, type Product, type Variant } from '../data/products';
-import { COLORS, MATERIALS, ROOMS, STYLES, TECHNIQUES } from '../data/vocabularies';
+import { CARPET_CATEGORIES, carpetCategoryPath, COLORS, findCarpetCategory, findTerm, MATERIALS, ROOMS, STYLES, TECHNIQUES } from '../data/vocabularies';
 
 export type SortKey = 'relevance' | 'price-asc' | 'price-desc' | 'rating' | 'best-selling' | 'newest';
 
@@ -27,6 +27,7 @@ export interface FacetState {
   readonly colors: readonly string[];
   readonly rooms: readonly string[];
   readonly styles: readonly string[];
+  readonly categorySlug: string | null; // curated design category (CARPET_CATEGORIES slug)
   readonly sizeBucket: string | null; // 'small' | 'medium' | 'large' | 'runner'
   readonly priceMin: number | null;
   readonly priceMax: number | null;
@@ -36,6 +37,7 @@ export interface FacetState {
 
 export const EMPTY_FACETS: FacetState = {
   techniques: [], materials: [], colors: [], rooms: [], styles: [],
+  categorySlug: null,
   sizeBucket: null, priceMin: null, priceMax: null, query: '', sort: 'relevance',
 };
 
@@ -50,6 +52,7 @@ export function facetsFromSearch(sp: URLSearchParams): FacetState {
     colors: csv(sp.get('color') ?? ''),
     rooms: csv(sp.get('room') ?? ''),
     styles: csv(sp.get('style') ?? ''),
+    categorySlug: sp.get('category'),
     sizeBucket: sp.get('size'),
     priceMin: sp.get('min') ? Number(sp.get('min')) : null,
     priceMax: sp.get('max') ? Number(sp.get('max')) : null,
@@ -65,6 +68,7 @@ export function facetsToSearch(f: FacetState): URLSearchParams {
   if (f.colors.length) sp.set('color', f.colors.join(','));
   if (f.rooms.length) sp.set('room', f.rooms.join(','));
   if (f.styles.length) sp.set('style', f.styles.join(','));
+  if (f.categorySlug) sp.set('category', f.categorySlug);
   if (f.sizeBucket) sp.set('size', f.sizeBucket);
   if (f.priceMin != null) sp.set('min', String(f.priceMin));
   if (f.priceMax != null) sp.set('max', String(f.priceMax));
@@ -97,6 +101,7 @@ const matchesExceptColor = (p: Product, f: FacetState): boolean => {
   if (f.materials.length && !f.materials.includes(p.materialSlug)) return false;
   if (f.rooms.length && !f.rooms.some((r) => p.roomSlugs.includes(r))) return false;
   if (f.styles.length && !f.styles.some((s) => p.styleSlugs.includes(s))) return false;
+  if (f.categorySlug && !p.categoryPaths.includes(carpetCategoryPath(f.categorySlug))) return false;
   if (f.query.trim()) {
     const q = f.query.toLowerCase();
     const hay = `${p.name} ${p.tagline} ${p.description} ${p.craftStory}`.toLowerCase();
@@ -215,6 +220,8 @@ export function appliedChips(f: FacetState): Chip[] {
   f.colors.forEach((s) => chips.push({ group: 'colors', value: s, label: termLabel(COLORS, s) }));
   f.rooms.forEach((s) => chips.push({ group: 'rooms', value: s, label: termLabel(ROOMS, s) }));
   f.styles.forEach((s) => chips.push({ group: 'styles', value: s, label: termLabel(STYLES, s) }));
+  if (f.categorySlug)
+    chips.push({ group: 'categorySlug', value: f.categorySlug, label: termLabel(CARPET_CATEGORIES, f.categorySlug) });
   if (f.sizeBucket)
     chips.push({ group: 'sizeBucket', value: f.sizeBucket, label: SIZE_BUCKETS.find((b) => b.key === f.sizeBucket)?.label ?? f.sizeBucket });
   if (f.priceMin != null || f.priceMax != null) {
@@ -236,6 +243,7 @@ export function removeChip(f: FacetState, chip: Chip): FacetState {
     case 'colors': return { ...f, colors: f.colors.filter((x) => x !== chip.value) };
     case 'rooms': return { ...f, rooms: f.rooms.filter((x) => x !== chip.value) };
     case 'styles': return { ...f, styles: f.styles.filter((x) => x !== chip.value) };
+    case 'categorySlug': return { ...f, categorySlug: null };
     case 'sizeBucket': return { ...f, sizeBucket: null };
     case 'price': return { ...f, priceMin: null, priceMax: null };
     case 'query': return { ...f, query: '' };
@@ -249,6 +257,8 @@ export function removeChip(f: FacetState, chip: Chip): FacetState {
 export function productsInCategory(path: string): Product[] {
   return PRODUCTS.filter((p) => p.categoryPaths.includes(path));
 }
+
+// ── Category-path titles for every dual-axis taxonomy node (curated + derived).
 
 export const CATEGORY_TITLES: Record<string, string> = {
   'rugs/hand-knotted/wool': 'Hand-Knotted Wool Rugs',
@@ -267,4 +277,36 @@ export const CATEGORY_TITLES: Record<string, string> = {
   'rugs/traditional': 'Traditional Rugs',
   'rugs/modern': 'Modern Rugs',
   'rugs/botanical': 'Botanical Rugs',
+  'rugs/kids-room': 'Kids Room Rugs',
 };
+
+// ── Category-path titles for every dual-axis taxonomy node (curated + derived).
+// Covers the 15 curated design categories (`rugs/category/<slug>`), room,
+// style and technique×material paths — so collection pages never lose a title.
+
+
+export function categoryTitle(path: string): string | undefined {
+  if (CATEGORY_TITLES[path]) return CATEGORY_TITLES[path];
+  const parts = path.split('/');
+  if (parts[0] === 'rugs' && parts[1] === 'category') {
+    return findCarpetCategory(parts.slice(2).join('-'))?.label;
+  }
+  if (parts[0] === 'rugs' && parts.length === 3) {
+    const tech = findTerm(TECHNIQUES, parts[1]);
+    const mat = findTerm(MATERIALS, parts[2]);
+    if (tech && mat) return `${tech.label} ${mat.label} Rugs`;
+  }
+  if (parts[0] === 'rugs' && parts.length === 2) {
+    const term = findTerm(ROOMS, parts[1]) ?? findTerm(STYLES, parts[1]) ?? findTerm(MATERIALS, parts[1]);
+    if (term) return `${term.label} Rugs`;
+  }
+  return undefined;
+}
+
+/** All category paths present in the catalogue, incl. every curated category. */
+export function allCategoryPaths(products: readonly Product[] = PRODUCTS): string[] {
+  const seen = new Set<string>();
+  products.forEach((p) => p.categoryPaths.forEach((path) => seen.add(path)));
+  CARPET_CATEGORIES.forEach((c) => seen.add(carpetCategoryPath(c.slug)));
+  return [...seen].sort();
+}

@@ -78,7 +78,10 @@ export const isValidCustomPair = (w: number, l: number): boolean =>
   w >= 1 && l >= 1 && w <= 15 && l <= 15 && w * l >= 2 && w * l <= 150;
 
 // ── Stain-resistant coating add-on ───────────────────────────────────────────
-// ₹90 per square foot, applied at the end of checkout (cart lines only).
+// THE single source of truth for the business rule: ₹90 per square foot.
+// Coating cost = width ft × length ft × ₹90.  Example: a 5 × 6 ft rug is
+// 30 sq ft → 30 × ₹90 = ₹2,700. Every screen (PDP, cart, checkout, order
+// record, admin) must call these helpers — never re-derive the rate.
 
 export const STAIN_COAT_RATE_INR_PER_SQFT = 90;
 
@@ -86,5 +89,67 @@ export function stainCoatCost(sqft: number): number {
   return Math.round(Math.max(sqft, 0) * STAIN_COAT_RATE_INR_PER_SQFT);
 }
 
+/** Coating cost directly from validated feet dimensions (canonical path). */
+export function stainCoatCostForFt(widthFt: number, lengthFt: number): number {
+  if (!isValidCustomPair(widthFt, lengthFt)) return 0;
+  return stainCoatCost(widthFt * lengthFt);
+}
+
+/** Square footage from a stored variant (cm dimensions converted once, here). */
 export const lineSqft = (variant: { width: { cm: number }; length: { cm: number } }): number =>
   (variant.width.cm / CM_PER_FT) * (variant.length.cm / CM_PER_FT);
+
+/** Canonical feet for any dimension pair — exact match first, else raw value. */
+export function feetOf(dimensions: { cm: number }): number {
+  const ft = dimensions.cm / CM_PER_FT;
+  const nearest = Math.round(ft * 10) / 10;
+  // Snap tiny float drift (e.g. 182.88 cm → 183 cm → 6.002 ft) to 0.1 ft.
+  return Math.abs(ft - nearest) < 0.02 ? nearest : Number(ft.toFixed(2));
+}
+
+/** Line total incl. optional coating: (price + coatingPerUnit) × qty, rounded once. */
+export function lineTotalInr(priceInr: number, coatingPerUnitInr: number, qty: number): number {
+  return Math.round((priceInr + coatingPerUnitInr) * Math.max(qty, 0));
+}
+
+// ── Custom-size validation ───────────────────────────────────────────────────
+// Rejects empty / NaN / zero / negative / unreasonably large dimensions.
+// w×l must fall between 2 and 150 sq ft and each side between 1 and 15 ft.
+
+export function validateSizeFeet(w: number, l: number): string | null {
+  if (!Number.isFinite(w) || !Number.isFinite(l)) return 'Enter numeric width and length in feet.';
+  if (w <= 0 || l <= 0) return 'Dimensions must be greater than zero.';
+  if (w < 1 || l < 1) return 'The smallest rug we weave is 1 ft on each side.';
+  if (w > 15 || l > 15) return 'Each side must be 15 ft or less (larger pieces need a studio quote).';
+  if (w * l < 2) return 'Total area must be at least 2 sq ft.';
+  if (w * l > 150) return 'Total area must stay within 150 sq ft online — ask the atelier for larger.';
+  return null;
+}
+
+/**
+ * Custom-size price estimate. There is no authoritative published rate card
+ * for bespoke dimensions, so we surface the piece's own derived rate
+ * (base price ÷ base area) as an ESTIMATE that the studio confirms before
+ * production. This keeps quotes honest instead of inventing a fixed markup.
+ */
+export function customSizeEstimate(basePriceInr: number, baseW: number, baseL: number, w: number, l: number): number {
+  const rate = ratePerSqft(basePriceInr, build('tmp', baseW, baseL));
+  return Math.round(rate * w * l);
+}
+
+/** Per-side recommendation guidance for the floor-plan (room) selector. */
+export interface RoomSizeGuidance {
+  readonly roomSlug: string;
+  readonly note: string;
+  /** Recommended subset of the five standard sizes (keys into SIZE_OPTIONS). */
+  readonly recommendedKeys: readonly string[];
+}
+
+export const ROOM_SIZE_GUIDANCE: readonly RoomSizeGuidance[] = [
+  { roomSlug: 'living-room', note: 'Leave 15–30 cm of floor showing beyond every sofa leg. A 6\' × 9\' anchors most sofas; go 8\' × 10\' or 9\' × 12\' for open-plan rooms.', recommendedKeys: ['5x8', '6x9', '8x10', '9x12'] },
+  { roomSlug: 'bedroom', note: 'A bedside 4\' × 6\' lands underfoot when you rise; for a king bed let the rug extend 60 cm past both sides — 6\' × 9\' or 8\' × 10\'.', recommendedKeys: ['4x6', '5x8', '6x9', '8x10'] },
+  { roomSlug: 'dining-room', note: 'Add 2 ft on every side of the table so chairs stay on the rug when pulled out — usually 8\' × 10\' for six seats, 9\' × 12\' for eight.', recommendedKeys: ['6x9', '8x10', '9x12'] },
+  { roomSlug: 'kids-room', note: 'Pick a soft pile sized to the play zone — 4\' × 6\' beside the bed or 5\' × 8\' / 6\' × 9\' for a floor-play area that wipes clean.', recommendedKeys: ['4x6', '5x8', '6x9'] },
+  { roomSlug: 'hallway', note: 'Runners keep passages warm; 4\' × 6\' works at an entry, narrow long formats elsewhere.', recommendedKeys: ['4x6', '5x8'] },
+  { roomSlug: 'office', note: 'A 5\' × 8\' under a desk chair keeps casters on pile; 4\' × 6\' suits a reading corner.', recommendedKeys: ['4x6', '5x8', '6x9'] },
+];

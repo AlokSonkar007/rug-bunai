@@ -43,6 +43,7 @@ export const ROOMS = [
   t('Living Room'),
   t('Bedroom'),
   t('Dining Room'),
+  t('Kids Room'),
   t('Hallway'),
   t('Office'),
 ] as const;

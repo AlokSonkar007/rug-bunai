@@ -20,6 +20,25 @@ export type OfferInput = {
   sizeKey: string; widthFt: number; lengthFt: number; colorSlug: string; priceInr: number; stock: number;
 };
 
+/**
+ * A customer-configured Studio offer (custom size and/or custom colour).
+ * Persisted with the order record so the atelier can confirm feasibility —
+ * a custom colour is a REQUEST, not an automatically available SKU.
+ */
+export type CustomOffer = {
+  readonly id: string;               // synthetic variant id, unique per request
+  readonly productSlug: string;
+  readonly sizeLabel: string;        // e.g. `7.5' × 4.5'`
+  readonly widthFt: number;
+  readonly lengthFt: number;
+  readonly colorSlug: string;        // standard slug when picked from palette
+  readonly colorName: string;        // display name incl. custom colour names
+  readonly colorHex?: string;        // set only for customer-requested colours
+  readonly priceInr: number;         // derived estimate (studio confirms)
+  readonly coating?: boolean;
+  readonly note?: string;            // free-text request for the atelier
+};
+
 export type NewProductInput = {
   name: string;
   slug: string;

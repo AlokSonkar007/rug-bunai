@@ -5,7 +5,7 @@ import {
   appliedChips, EMPTY_FACETS, facetsFromSearch, facetsToSearch, removeChip,
   runSearch, SORT_OPTIONS, type FacetGroup, type FacetState,
 } from '../lib/search';
-import { CATEGORY_TITLES, productsInCategory } from '../lib/search';
+import { categoryTitle, productsInCategory } from '../lib/search';
 import { ProductCard, Reveal } from './ProductCard';
 import { useCatalog } from '../lib/catalog';
 
@@ -119,7 +119,10 @@ export default function CollectionView({ categoryPath }: { categoryPath?: string
     if (!categoryPath) return baseState;
     const parts = categoryPath.split('/').slice(1); // drop "rugs"
     const next = { ...baseState };
-    if (['hand-knotted', 'hand-tufted', 'flat-woven', 'loom-woven'].includes(parts[0])) {
+    if (parts[0] === 'category') {
+      // Curated design category — filter on the product's categoryPaths.
+      next.categorySlug = parts.slice(1).join('-');
+    } else if (['hand-knotted', 'hand-tufted', 'flat-woven', 'loom-woven'].includes(parts[0])) {
       next.techniques = [...new Set([...baseState.techniques, parts[0]])];
       if (parts[1]) next.materials = [...new Set([...baseState.materials, parts[1]])];
     } else if (findTerm(ROOMS, parts[0])) {
@@ -137,7 +140,7 @@ export default function CollectionView({ categoryPath }: { categoryPath?: string
 
   const update = (next: FacetState) => setSp(facetsToSearch(next), { replace: false });
 
-  const title = categoryPath ? CATEGORY_TITLES[categoryPath] ?? 'The Collection' : 'The Collection';
+  const title = (categoryPath && categoryTitle(categoryPath)) || 'The Collection';
   const intro = categoryPath
     ? 'Every piece below is knotted, tufted or woven by hand in our Bhadohi workshops — filter to narrow by what matters to your room.'
     : 'Browse the full archive of designs. Combine filters freely — counts update live so you never reach a dead end.';
