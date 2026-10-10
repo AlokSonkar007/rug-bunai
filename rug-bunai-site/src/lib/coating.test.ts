@@ -42,7 +42,10 @@ describe('room-specific size guidance', () => {
       for (const k of g.recommendedKeys) {
         const opt = sizeByKey(k);
         expect(opt, `missing ${k}`).toBeTruthy();
-        expect(opt!.custom).toBe(false);
+        // Contract: recommended keys must resolve to standard sizes only.
+        // Standard options leave the optional `custom` flag undefined;
+        // only the custom option sets it true. Assert falsy (not a strict false).
+        expect(opt!.custom ?? false).toBe(false);
       }
     }
   });
