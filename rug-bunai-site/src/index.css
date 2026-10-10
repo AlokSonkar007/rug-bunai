@@ -557,6 +557,67 @@ main { flex: 1; }
 .skip-link { position: absolute; left: -9999px; }
 .skip-link:focus { left: 16px; top: 16px; z-index: 3000; background: var(--ink); color: var(--paper); padding: 10px 18px; }
 
+/* ── Floating WhatsApp concierge (site-wide, bottom-right) ──────────────── */
+
+.wa-fab {
+  position: fixed;
+  right: clamp(16px, 3vw, 28px);
+  bottom: clamp(16px, 3vw, 28px);
+  z-index: 1600; /* above content & toast, below the grain overlay (2000) */
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  background: #25d366; /* official WhatsApp green */
+  color: #ffffff;
+  box-shadow: 0 6px 18px rgba(29, 26, 22, 0.22), 0 2px 6px rgba(37, 211, 102, 0.35);
+  overflow: hidden;
+  transition: width 0.28s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.28s ease, background-color 0.2s ease;
+}
+.wa-fab:hover,
+.wa-fab:focus-visible,
+.wa-fab:focus-within {
+  width: min(248px, calc(100vw - 32px)); /* no layout shift — fixed edge, grows inward */
+  background: #1ebe5b;
+  box-shadow: 0 10px 26px rgba(29, 26, 22, 0.28), 0 3px 10px rgba(37, 211, 102, 0.4);
+}
+.wa-fab:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+
+.wa-fab-icon {
+  flex: 0 0 auto;
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+}
+
+.wa-fab-label {
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding-right: 20px;
+  opacity: 0;
+  transform: translateX(8px);
+  transition: opacity 0.22s ease 0.06s, transform 0.28s cubic-bezier(0.22, 1, 0.36, 1) 0.06s;
+}
+.wa-fab:hover .wa-fab-label,
+.wa-fab:focus-visible .wa-fab-label,
+.wa-fab:focus-within .wa-fab-label {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wa-fab, .wa-fab-label { transition: none; }
+  .wa-fab-label { transform: none; }
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    RESPONSIVE PASS 2 + MODERN COMMERCE LAYER
    • fluid grids that never squish on phones/tablets
