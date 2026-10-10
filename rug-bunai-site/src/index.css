@@ -1051,3 +1051,32 @@ main { flex: 1; }
   .carousel-slide.is-active .hero-art img { animation: none; }
   .slide-up { animation: none; }
 }
+
+/* ── Product colour management (admin editor + PDP custom-colour request) ── */
+.colour-editor { border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; background: var(--paper); }
+.colour-editor-list { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 8px; }
+.colour-editor-list li { display: flex; align-items: center; gap: 10px; font-size: 0.88rem; }
+.colour-editor-name { font-weight: 500; }
+.colour-editor-hex { font-size: 0.75rem; color: var(--muted, #6f6a61); background: rgba(0,0,0,0.04); padding: 2px 7px; border-radius: 5px; }
+.colour-quickpick { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.colour-quickpick-btn { display: inline-flex; align-items: center; gap: 6px; font-size: 0.75rem; letter-spacing: 0.04em; padding: 5px 10px; border: 1px solid var(--line); border-radius: 999px; background: transparent; cursor: pointer; transition: border-color 0.2s ease, background 0.2s ease; }
+.colour-quickpick-btn:hover { border-color: var(--umber); background: rgba(176,113,79,0.06); }
+.field-error { color: #a33; font-size: 0.8rem; margin: 8px 0 0; }
+
+.swatch-custom { display: grid; place-items: center; background: transparent !important; border: 1.5px dashed var(--umber); color: var(--umber); font-size: 1.1rem; line-height: 1; }
+.swatch-custom.active { outline: 1.5px solid var(--ink); border-style: solid; }
+.pdp-custom { margin-top: 14px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; background: rgba(176,113,79,0.04); }
+.pdp-custom-row { display: flex; align-items: center; gap: 12px; }
+.pdp-custom-row input[type='color'] { width: 52px; height: 40px; padding: 2px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); cursor: pointer; }
+.pdp-custom-preview { width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); box-shadow: inset 0 0 0 3px rgba(255,255,255,0.55), 0 1px 3px rgba(0,0,0,0.12); }
+.pdp-custom-name { width: 100%; margin-top: 10px; padding: 9px 12px; font: inherit; font-size: 0.88rem; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); }
+.pdp-custom-name:focus-visible, .pdp-custom-row input[type='color']:focus-visible { outline: 2px solid var(--umber); outline-offset: 2px; }
+.pdp-custom-note { font-size: 0.78rem; line-height: 1.5; margin: 10px 0 0; }
+
+.cart-custom-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--line); vertical-align: -2px; margin-right: 4px; }
+.cart-custom-note { font-size: 0.75rem; font-style: italic; margin: 6px 0 0; }
+
+@media (max-width: 480px) {
+  .pdp-custom-row { flex-wrap: wrap; }
+  .colour-editor-list li { flex-wrap: wrap; }
+}

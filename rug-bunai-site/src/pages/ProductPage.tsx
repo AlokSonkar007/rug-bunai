@@ -1,17 +1,24 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { formatINR } from '../data/products';
-import { CLASSIFICATIONS, colorHex, findTerm, MATERIALS, TECHNIQUES } from '../data/vocabularies';
+import { CLASSIFICATIONS, findTerm, MATERIALS, TECHNIQUES } from '../data/vocabularies';
 import { productImage } from '../lib/images';
 import { useCatalog } from '../lib/catalog';
 import { useWishlist } from '../lib/wishlist';
 import { useCart } from '../lib/cart';
 import { ProductCard, Reveal } from '../components/ProductCard';
+import {
+  colourLabelFor, isValidHex, normalizeHex, resolveColourOptions,
+  type CustomColourRequest, type ProductColourOption,
+} from '../lib/colours';
+
+const CUSTOM_SENTINEL = '__custom__';
 
 /**
  * PDP — where conversion happens. Interactive gallery with macro angles,
- * colour swatches + size pills (variants), exhaustive dual-unit specs,
- * craft storytelling tab, and typed product relationships ("complete the look").
+ * admin-managed colour swatches (+ customer custom-colour request) and size
+ * pills (variants), exhaustive dual-unit specs, craft storytelling tab, and
+ * typed product relationships ("complete the look").
  */
 export default function ProductPage() {
   const { slug } = useParams();
@@ -24,6 +31,10 @@ export default function ProductPage() {
   const [variantId, setVariantId] = useState<string | null>(null);
   const [tab, setTab] = useState<'details' | 'craft' | 'care'>('details');
   const [toast, setToast] = useState<string | null>(null);
+  // Customer custom-colour request state (revealed by "Customise your colour").
+  const [customOpen, setCustomOpen] = useState(false);
+  const [customHex, setCustomHex] = useState('#B0714F');
+  const [customName, setCustomName] = useState('');
   const cart = useCart();
 
   useEffect(() => {
@@ -31,13 +42,30 @@ export default function ProductPage() {
     setColor(product.colorSlugs[0]);
     setVariantId(null);
     setAngle(0);
+    // Switching rugs must never carry a previous rug's colour selection over.
+    setCustomOpen(false);
+    setCustomHex('#B0714F');
+    setCustomName('');
     window.scrollTo(0, 0);
   }, [slug, product]);
 
-  const variantsInColor = useMemo(
-    () => product?.variants.filter((v) => v.colorSlug === color) ?? [],
-    [product, color],
+  const colourOptions = useMemo<ProductColourOption[]>(
+    () => (product ? resolveColourOptions(product) : []),
+    [product],
   );
+  const usingCustom = color === CUSTOM_SENTINEL;
+  const customValid = isValidHex(customHex);
+  const selectedCustom: CustomColourRequest | null = usingCustom && customValid
+    ? { hex: normalizeHex(customHex) ?? customHex.toLowerCase(), ...(customName.trim() ? { name: customName.trim() } : {}) }
+    : null;
+
+  const variantsInColor = useMemo(() => {
+    if (!product) return [];
+    // Custom-colour requests reuse the rug's size/price structure — the shade
+    // itself is a request pending atelier confirmation, never a fake variant.
+    if (color === CUSTOM_SENTINEL) return product.variants;
+    return product.variants.filter((v) => v.colorSlug === color);
+  }, [product, color]);
   const selected =
     product?.variants.find((v) => v.id === variantId) ??
     variantsInColor.find((v) => v.stock > 0) ??
@@ -68,6 +96,36 @@ export default function ProductPage() {
   const sqftPrice = selected
     ? Math.round(selected.priceInr / ((selected.width.cm * selected.length.cm) / 929.03))
     : null;
+
+  const currentColourLabel = usingCustom
+    ? (customName.trim() || 'Custom colour')
+    : (colourOptions.find((c) => c.slug === color)?.label ?? colourLabelFor(color));
+
+  const addToCart = () => {
+    if (usingCustom) {
+      if (!selectedCustom) { notify('Choose a valid custom colour first.'); return; }
+      if (!selected) { notify('Select a size for your custom-colour piece.'); return; }
+      // Custom colour → its own cart line via the existing CustomOffer model,
+      // presented as a REQUEST pending atelier confirmation.
+      cart.addCustom(product, {
+        id: 'custom-' + crypto.randomUUID(),
+        productSlug: product.slug,
+        sizeLabel: selected.sizeLabel,
+        widthFt: selected.width.in / 12,
+        lengthFt: selected.length.in / 12,
+        colorSlug: 'custom',
+        colorName: currentColourLabel,
+        colorHex: selectedCustom.hex,
+        priceInr: selected.priceInr,
+        note: `Custom colour request: ${currentColourLabel} (${selectedCustom.hex}). Feasibility and final shade to be confirmed by Rug Bunai before weaving.`,
+      });
+      notify(`Custom-colour request added — ${currentColourLabel}, ${selected.sizeLabel}`);
+      return;
+    }
+    if (!selected) return;
+    cart.add(selected.id);
+    notify(`Added ${product.name} — ${selected.sizeLabel} to your cart`);
+  };
 
   return (
     <div className="wrap" style={{ paddingBottom: 'clamp(64px,8vw,120px)' }}>
@@ -116,22 +174,82 @@ export default function ProductPage() {
             )}
           </p>
 
-          {/* Colour swatches — variants combined, comparable side by side */}
+          {/* Colour — admin-managed options + customer custom-colour request */}
           <div style={{ marginTop: 24 }}>
-            <p className="eyebrow" style={{ marginBottom: 10 }}>Colour — {color.replace(/-/g, ' ')}</p>
+            <p className="eyebrow" style={{ marginBottom: 10 }}>Colour — {currentColourLabel}</p>
             <div className="card-swatches" role="group" aria-label="Choose colour">
-              {product.colorSlugs.map((c) => (
+              {colourOptions.map((c) => (
                 <button
-                  key={c}
-                  className={`swatch ${c === color ? 'active' : ''}`}
-                  style={{ background: colorHex(c) }}
-                  aria-pressed={c === color}
-                  aria-label={`Colour ${c.replace(/-/g, ' ')}`}
-                  title={c.replace(/-/g, ' ')}
-                  onClick={() => { setColor(c); setVariantId(null); }}
+                  key={c.slug}
+                  type="button"
+                  className={`swatch ${!usingCustom && c.slug === color ? 'active' : ''}`}
+                  style={{ background: c.hex }}
+                  aria-pressed={!usingCustom && c.slug === color}
+                  aria-label={`Colour ${c.label}`}
+                  title={c.label}
+                  onClick={() => { setColor(c.slug); setVariantId(null); }}
                 />
               ))}
+              <button
+                type="button"
+                className={`swatch swatch-custom ${usingCustom ? 'active' : ''}`}
+                aria-pressed={usingCustom}
+                aria-label="Customise your colour"
+                title="Customise your colour"
+                aria-expanded={customOpen}
+                onClick={() => {
+                  if (usingCustom) {
+                    // Second click returns to the predefined palette.
+                    setCustomOpen(false);
+                    setColor(colourOptions[0]?.slug ?? product.colorSlugs[0] ?? '');
+                    setVariantId(null);
+                  } else {
+                    setCustomOpen(true);
+                    setColor(CUSTOM_SENTINEL);
+                    setVariantId(null);
+                  }
+                }}
+              >
+                <span aria-hidden="true">+</span>
+              </button>
             </div>
+
+            {customOpen && (
+              <div className="pdp-custom">
+                <label htmlFor="pdp-custom-picker" className="subhead" style={{ fontSize: '0.9rem', display: 'block', marginBottom: 8 }}>
+                  Pick any shade you like
+                </label>
+                <div className="pdp-custom-row">
+                  <input
+                    id="pdp-custom-picker"
+                    type="color"
+                    value={isValidHex(customHex) ? customHex : '#B0714F'}
+                    onChange={(e) => {
+                      const n = normalizeHex(e.target.value);
+                      if (n) setCustomHex(n);
+                    }}
+                  />
+                  <span
+                    className="pdp-custom-preview"
+                    style={{ background: isValidHex(customHex) ? customHex : undefined }}
+                    aria-hidden="true"
+                  />
+                  <code className="colour-editor-hex">{customValid ? customHex : 'invalid'}</code>
+                </div>
+                <input
+                  className="pdp-custom-name"
+                  aria-label="Optional name for your custom colour"
+                  placeholder="Optional name, e.g. Dusty teal"
+                  value={customName}
+                  maxLength={40}
+                  onChange={(e) => setCustomName(e.target.value)}
+                />
+                <p className="muted pdp-custom-note">
+                  This is a <strong>custom-colour request</strong>, not a guarantee. Rug Bunai will confirm
+                  production feasibility and the final shade before weaving begins.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Size pills (child variants) */}
@@ -155,14 +273,12 @@ export default function ProductPage() {
           <button
             className="btn btn-solid btn-block"
             style={{ marginTop: 30 }}
-            disabled={!selected || selected.stock === 0}
-            onClick={() => {
-              if (!selected) return;
-              cart.add(selected.id);
-              notify(`Added ${product.name} — ${selected.sizeLabel} to your cart`);
-            }}
+            disabled={usingCustom ? !selectedCustom || !selected : !selected || selected.stock === 0}
+            onClick={addToCart}
           >
-            {selected && selected.stock === 0 ? 'Notify me when rewoven' : 'Add to Cart'}
+            {usingCustom
+              ? 'Add Custom-Colour Request'
+              : selected && selected.stock === 0 ? 'Notify me when rewoven' : 'Add to Cart'}
           </button>
           <button
             className="btn btn-block"

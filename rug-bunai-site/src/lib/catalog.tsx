@@ -2,9 +2,10 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { makeVariant, PRODUCTS, type Product } from '../data/products';
 import { carpetCategoryPath, findCarpetCategory, MATERIALS, STYLES, TECHNIQUES } from '../data/vocabularies';
 import { SIZE_OPTIONS, sizeLabelFor } from './sizes';
-import { useSiteContent } from './siteContent';
+import { useSiteContent, type TextOverride } from './siteContent';
 import { useAuth } from './auth';
 import { supabase } from './supabase';
+import { dedupeColourOptions, isValidHex, type ProductColourOption } from './colours';
 
 export type CatalogProduct = Product & {
   imageUrl?: string | null;
@@ -50,6 +51,8 @@ export type NewProductInput = {
   styleSlugs: string[];
   categorySlugs: string[];
   offers: OfferInput[];
+  /** Admin-defined colour options for this rug (Studio > Colours). */
+  colourOptions?: ProductColourOption[];
 };
 
 type CatalogContextValue = {
@@ -60,6 +63,8 @@ type CatalogContextValue = {
   createManagedProduct: (input: NewProductInput) => Promise<void>;
   removeProduct: (product: CatalogProduct) => Promise<void>;
   changeProductPhoto: (product: CatalogProduct, file: File) => Promise<void>;
+  /** Persist admin-managed colour options for any catalogue product. */
+  saveProductColours: (product: CatalogProduct, options: ProductColourOption[]) => Promise<void>;
 };
 
 const CatalogContext = createContext<CatalogContextValue | null>(null);
@@ -95,6 +100,9 @@ function managedProduct(row: ManagedRow): CatalogProduct {
     description: saved.description ?? '',
     craftStory: saved.craftStory ?? 'Details from the atelier will be added shortly.',
     colorSlugs: saved.colorSlugs?.length ? saved.colorSlugs : ['ivory'],
+    ...(Array.isArray(saved.colourOptions) && saved.colourOptions.length
+      ? { colourOptions: (saved.colourOptions as ProductColourOption[]).filter((o) => o && typeof o.slug === 'string' && typeof o.label === 'string' && isValidHex(o.hex ?? '')) }
+      : {}),
     materialSlug: saved.materialSlug ?? 'wool',
     techniqueSlug: saved.techniqueSlug ?? 'hand-knotted',
     styleSlugs: saved.styleSlugs?.length ? saved.styleSlugs : ['modern'],
@@ -150,6 +158,7 @@ function newProductPayload(input: NewProductInput): Product {
     description: input.description,
     craftStory: 'Each Rug Bunai piece carries the marks of the hands and loom that made it.',
     colorSlugs: colors.length ? colors : ['ivory'],
+    ...(input.colourOptions?.length ? { colourOptions: dedupeColourOptions(input.colourOptions) } : {}),
     materialSlug: input.materialSlug,
     techniqueSlug: input.techniqueSlug,
     styleSlugs: input.styleSlugs.length ? input.styleSlugs : ['modern'],
@@ -177,8 +186,8 @@ function newProductPayload(input: NewProductInput): Product {
 }
 
 export function CatalogProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
-  const { productOverrides, saveProductHidden, saveProductImage } = useSiteContent();
+  const { user, profile } = useAuth();
+  const { productOverrides, saveProductHidden, saveProductImage, saveProductText } = useSiteContent();
   const [remoteProducts, setRemoteProducts] = useState<CatalogProduct[]>([...PRODUCTS]);
   const [loading, setLoading] = useState(Boolean(supabase));
 
@@ -289,9 +298,45 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     }
   }, [refresh, uploadProductPhoto, saveProductImage]);
 
+  /** Persist admin-managed colour options for a product.
+   * Managed products update their JSON record directly; base catalogue items
+   * use the text-override path (saveProductText) so colours survive refresh.
+   */
+  const saveProductColours = useCallback(async (product: CatalogProduct, options: ProductColourOption[]) => {
+    if (!user || profile?.role !== 'admin') {
+      throw new Error('Only administrators can manage product colours.');
+    }
+    const clean = dedupeColourOptions(options);
+    // Validate every option before saving anything.
+    for (const o of clean) {
+      if (!isValidHex(o.hex)) throw new Error(`Invalid hex colour "${o.hex}" for ${o.label}. Use #RRGGBB.`);
+    }
+    const textPatch: TextOverride = { colourOptions: clean, colorSlugs: clean.map((c) => c.slug) };
+    if (supabase && product.isManaged) {
+      const { error } = await supabase
+        .from('managed_products')
+        .update({ product: { ...product, ...textPatch } })
+        .eq('id', product.managedId!);
+      if (error) throw error;
+      await refresh();
+      return;
+    }
+    if (supabase) {
+      // Base catalogue item — store in the site-content overrides document,
+      // which is admin-write protected (same path as other Studio text edits).
+      await saveProductText(product.slug, textPatch);
+      await refresh();
+      return;
+    }
+    // No backend configured — persist through the local content store so the
+    // edit survives a refresh on this device (documented limitation).
+    await saveProductText(product.slug, textPatch);
+    await refresh();
+  }, [user, profile, refresh, saveProductText]);
+
   const value = useMemo(() => ({
-    products, loading, refresh, uploadProductPhoto, createManagedProduct, removeProduct, changeProductPhoto,
-  }), [changeProductPhoto, createManagedProduct, loading, products, refresh, uploadProductPhoto]);
+    products, loading, refresh, uploadProductPhoto, createManagedProduct, removeProduct, changeProductPhoto, saveProductColours,
+  }), [changeProductPhoto, createManagedProduct, loading, products, refresh, uploadProductPhoto, saveProductColours]);
 
   return <CatalogContext.Provider value={value}>{children}</CatalogContext.Provider>;
 }

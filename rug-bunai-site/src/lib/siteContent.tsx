@@ -170,7 +170,7 @@ function deepMerge<T>(base: T, patch: unknown): T {
 const LS_KEY = 'rugbunai-site-content-v1';
 const LS_OVERRIDES = 'rugbunai-product-overrides-v1';
 
-export type TextOverride = Partial<Pick<Product, 'name' | 'tagline' | 'description' | 'craftStory'>>;
+export type TextOverride = Partial<Pick<Product, 'name' | 'tagline' | 'description' | 'craftStory' | 'colorSlugs' | 'colourOptions'>>;
 export type ProductOverrideMap = Record<string, { text?: TextOverride; imageUrl?: string | null; hidden?: boolean }>;
 
 function readLS<T>(key: string, fallback: T): T {
