@@ -174,6 +174,28 @@ main { flex: 1; }
   .nav-open .nav-drawer { transform: translateX(0); }
 }
 
+/* ── Mobile header fit rules (320–430px) ────────────────────────────────
+   Root cause of horizontal overflow at 100% zoom: the header row is a
+   grid child whose default min-width:auto let its nowrap content (brand +
+   actions + fixed-width search input) push the whole page past the
+   viewport. Guards below keep every header element inside the screen. */
+html, body { max-width: 100%; overflow-x: clip; }
+.topbar { white-space: normal; line-height: 1.5; word-break: break-word; }
+.header-grid > * { min-width: 0; }
+.header-actions { gap: 12px; flex-wrap: wrap; }
+.header-search input { width: 0; min-width: 0; }
+.header-search.open input { width: clamp(96px, 30vw, 180px); }
+
+@media (max-width: 640px) {
+  .account-links { display: none; }           /* wishlist/studio/sign-in live in the drawer */
+  .header-call { display: none; }             /* floating WhatsApp button already covers contact */
+  .brand { font-size: 1rem; letter-spacing: 0.22em; text-indent: 0.22em; }
+  .brand small { display: none; }
+  .topbar { font-size: 0.6rem; letter-spacing: 0.14em; padding-block: 7px; }
+  .header-grid { padding-block: 12px; gap: 10px; }
+  .nav-drawer { inset: 0; padding: 80px 28px 40px; overflow-y: auto; }
+}
+
 .nav-drawer {
   position: fixed; inset: 0 18% 0 0;
   background: var(--paper-warm);
@@ -1180,4 +1202,35 @@ main { flex: 1; }
   .studio-product-grid > img { width: 64px; height: 48px; }
   /* Action buttons move below the info, full width, comfortable touch targets. */
   .studio-product-grid > div:last-child { grid-column: 1 / -1; justify-self: stretch; border-top: 1px solid var(--line); padding-top: 10px; }
+}
+
+/* ── Room-specific size recommendations (PLP floor-plan flow) ─────────── */
+.room-size-recs {
+  margin: 4px 0 22px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--paper-warm) 70%, transparent);
+}
+.room-size-recs .eyebrow { margin-bottom: 10px; }
+.room-size-recs-chips { display: flex; flex-wrap: wrap; gap: 10px; min-width: 0; }
+.size-rec {
+  font: inherit;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  padding: 9px 16px;
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+  white-space: normal;
+}
+.size-rec:hover { border-color: var(--umber); }
+.size-rec.active { background: var(--umber); border-color: var(--umber); color: var(--paper); }
+.room-size-note { font-size: 0.78rem; margin-top: 10px; max-width: 62ch; }
+@media (max-width: 640px) {
+  .room-size-recs { padding: 14px; }
+  .size-rec { font-size: 0.72rem; padding: 8px 13px; }
 }

@@ -521,6 +521,9 @@ export default function ProductPage() {
               : usingCustom
               ? 'Add Custom-Colour Request'
               : selectedResolved?.availability === 'made-to-order' ? 'Add Made-to-Order Piece' : 'Add to Cart'}
+            {coating && coatChargeInr > 0 ? (
+              <span style={{ marginLeft: 8, opacity: 0.9 }}>· total {formatINR(withCoatTotalInr)}</span>
+            ) : null}
           </button>
           <button
             className="btn btn-block"

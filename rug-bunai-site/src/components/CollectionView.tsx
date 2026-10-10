@@ -8,6 +8,17 @@ import {
 import { ProductCard, Reveal } from './ProductCard';
 import { useCatalog } from '../lib/catalog';
 import { useSiteContent } from '../lib/siteContent';
+import { ROOM_SIZE_GUIDANCE, sizeByKey } from '../lib/sizes';
+
+/** Longest side (ft → cm) bucket used by the size filter for a standard key. */
+function bucketForSizeKey(key: string): 'small' | 'medium' | 'large' {
+  const opt = sizeByKey(key);
+  if (!opt || opt.custom) return 'medium';
+  const longestCm = Math.max(opt.ft[0], opt.ft[1]) * 30.48;
+  if (longestCm <= 160) return 'small';
+  if (longestCm <= 250) return 'medium';
+  return 'large';
+}
 
 /** One facet group: multi-select checkboxes, dynamic counts, progressive disclosure. */
 function FacetBlock({
@@ -215,6 +226,44 @@ export default function CollectionView({ categoryPath }: { categoryPath?: string
               <button className="clear-all" onClick={() => update(EMPTY_FACETS)}>Clear all</button>
             </div>
           )}
+
+          {/* Room-specific size recommendations — driven by the selected room
+              facet(s); reuses ROOM_SIZE_GUIDANCE + SIZE_OPTIONS as the single
+              source of truth. Clicking a chip applies the matching size filter
+              while preserving every other active facet (incl. the room). */}
+          {(() => {
+            const guidance = constrained.rooms
+              .map((r) => ROOM_SIZE_GUIDANCE.find((g) => g.roomSlug === r))
+              .filter((g): g is (typeof ROOM_SIZE_GUIDANCE)[number] => Boolean(g));
+            if (guidance.length === 0) return null;
+            const recommendedKeys = [...new Set(guidance.flatMap((g) => [...g.recommendedKeys]))];
+            return (
+              <div className="room-size-recs" aria-label="Recommended sizes for this room">
+                <p className="eyebrow">Recommended for {constrained.rooms.length === 1
+                  ? (findTerm(ROOMS, constrained.rooms[0])?.label ?? 'this room')
+                  : 'your rooms'}</p>
+                <div className="room-size-recs-chips">
+                  {recommendedKeys.map((key) => {
+                    const opt = sizeByKey(key);
+                    if (!opt || opt.custom) return null;
+                    const bucket = bucketForSizeKey(key);
+                    const active = constrained.sizeBucket === bucket;
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        className={`size-rec${active ? ' active' : ''}`}
+                        onClick={() => update({ ...constrained, sizeBucket: active ? null : bucket })}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="muted room-size-note">{guidance[0].note}</p>
+              </div>
+            );
+          })()}
 
           {results.length === 0 ? (
             <div className="empty-state">
