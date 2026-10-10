@@ -14,7 +14,7 @@ import {
 } from '../lib/colours';
 import {
   SIZE_OPTIONS, STANDARD_SIZE_KEYS, feetOf, validateSizeFeet, customSizeEstimate, formatFtLabel,
-  productRatePerSqft, resolveStandardSize, mtoVariantId, type ResolvedSize,
+  productRatePerSqft, resolveStandardSize, type ResolvedSize,
 } from '../lib/sizes';
 
 const CUSTOM_SENTINEL = '__custom__';
@@ -101,6 +101,9 @@ export default function ProductPage() {
     return map;
   }, [product, variantsInColor, ratePerSqFt, usingCustom, color]);
 
+  // ── Custom-size request logic (sixth selector option) ──────────────────
+  const choosingCustomSize = sizeChoice === CUSTOM_SIZE_KEY;
+
   const selectedKey = choosingCustomSize ? null : (sizeChoice ?? variantId ? String(sizeChoice ?? variantId) : null);
   const selectedResolved: ResolvedSize | undefined = (() => {
     if (!product || choosingCustomSize) return undefined;
@@ -118,16 +121,13 @@ export default function ProductPage() {
   // Admin-authored Specifications notes for this product (Studio > Product
   // Pages). Read from the same persisted override document the editors write.
   const { productOverrides } = useSiteContent();
-  const ovSpecNotes = product ? (productOverrides[product.slug]?.text?.specNotes ?? '').trim() : '';
+  const ovText = product ? productOverrides[product.slug]?.text : undefined;
+  const ovSpecNotes = (ovText?.specNotes ?? '').trim();
+  // Admin-saved Craft Story / Care override the seed content; unedited
+  // products keep displaying their original catalogue text.
+  const craftStoryText = (ovText?.craftStory ?? '').trim() || (product?.craftStory ?? '');
+  const careText = (ovText?.specs?.careInstructions ?? '').trim() || (product?.specs.careInstructions ?? '');
 
-  // ── Custom-size request logic (sixth selector option) ──────────────────
-  const choosingCustomSize = sizeChoice === CUSTOM_SIZE_KEY;
-  /** A made-to-order pill maps to a deterministic pseudo-variant id. */
-  const mtoKeyForSelection = useMemo(() => {
-    if (!product || !sizeChoice || choosingCustomSize) return null;
-    const hit = Object.values(resolvedSizes).find((r) => r.variant?.id === sizeChoice);
-    return hit ? hit.option.key : null;
-  }, [product, sizeChoice, choosingCustomSize, resolvedSizes]);
   const customDims = useMemo(() => {
     const w = custW.trim() === '' ? NaN : Number(custW);
     const l = custL.trim() === '' ? NaN : Number(custL);
@@ -532,13 +532,13 @@ export default function ProductPage() {
           {tab === 'craft' && (
             <div>
               <p className="muted">{product.description}</p>
-              <blockquote className="pull-quote" style={{ marginBlock: 26 }}>{product.craftStory}</blockquote>
+              <blockquote className="pull-quote" style={{ marginBlock: 26 }}>{craftStoryText}</blockquote>
               <Link to="/journal/persian-vs-turkish-knot" className="clear-all">Learn the knot languages →</Link>
             </div>
           )}
           {tab === 'care' && (
             <div>
-              <p className="muted">{product.specs.careInstructions}</p>
+              <p className="muted">{careText}</p>
               <ul style={{ marginTop: 16 }}>
                 {[
                   'Use a natural-fibre underlay to prevent slippage and pile crush.',
