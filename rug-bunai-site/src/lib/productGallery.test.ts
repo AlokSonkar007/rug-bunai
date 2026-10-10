@@ -1,4 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+// The catalog module imports the Supabase client at load time; stub it so this
+// suite stays a pure unit test (Node 20 here lacks native WebSocket, which
+// supabase-js requires at client construction).
+vi.mock('./supabase', () => ({ supabase: null, isSupabaseConfigured: false, requireSupabase: () => null }));
 import { newProductPayload, type NewProductInput } from './catalog';
 import { galleryImageAt, galleryViewCount } from './images';
 import {
@@ -113,7 +117,8 @@ const baseInput: NewProductInput = {
   name: 'Test Rug',
   slug: 'test-rug',
   description: 'A test rug.',
-  imageUrl: P,
+  // imageUrl lives on the DB row column, not the Product type.
+  imageUrl: P, as never,
   techniqueSlug: 'hand-knotted',
   materialSlug: 'wool',
   roomSlugs: ['living-room'],
