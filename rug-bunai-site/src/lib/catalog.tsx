@@ -196,9 +196,12 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     const merged = remoteProducts.map((product) => {
       const ov = productOverrides[product.slug];
       if (!ov) return product;
+      const text = ov.text ?? {};
+      const { careInstructions, ...plainText } = text;
       return {
         ...product,
-        ...(ov.text ?? {}),
+        ...plainText,
+        ...(careInstructions ? { specs: { ...product.specs, careInstructions } } : null),
         imageUrl: ov.imageUrl !== undefined ? ov.imageUrl : product.imageUrl,
       };
     });

@@ -14,6 +14,7 @@ import { supabase } from './supabase';
 
 export const WHATSAPP_NUMBER = '919555036025'; // +91-9555036025
 export const CONTACT_PHONE_DISPLAY = '+91 95550 36025';
+export const WHATSAPP_TEL_HREF = `tel:+${WHATSAPP_NUMBER}`; // +91-9555036025
 export const whatsappLink = (text: string) =>
   `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(text)}`;
 
@@ -55,6 +56,7 @@ export interface SiteContent {
   roomTiles: RoomTileContent[];
   inspirationSplit: SplitBlockContent;
   colourBand: { eyebrow: string; title: string; sub: string };
+  productTabs: TabLabelsContent;
   newsletter: { eyebrow: string; title: string; note: string };
   footer: { about: string; phone: string };
 }
@@ -135,6 +137,7 @@ export const DEFAULT_CONTENT: SiteContent = {
     title: 'Find your palette',
     sub: 'Nine normalised house colours — tap one to see every design woven in that shade.',
   },
+  productTabs: DEFAULT_TAB_LABELS,
   newsletter: {
     eyebrow: 'The Loom Letter',
     title: 'One story, one new weave, monthly.',
@@ -169,8 +172,17 @@ function deepMerge<T>(base: T, patch: unknown): T {
 const LS_KEY = 'rugbunai-site-content-v1';
 const LS_OVERRIDES = 'rugbunai-product-overrides-v1';
 
-export type TextOverride = Partial<Pick<Product, 'name' | 'tagline' | 'description' | 'craftStory'>>;
+export type TextOverride = Partial<Pick<Product, 'name' | 'tagline' | 'description' | 'craftStory'>> & {
+  /** Admin-editable care text shown in the PDP "Care" tab (overrides specs.careInstructions). */
+  careInstructions?: string;
+};
+
+/** Admin-editable labels for the three PDP detail tabs. */
+export interface TabLabelsContent { details: string; craft: string; care: string; }
+
 export type ProductOverrideMap = Record<string, { text?: TextOverride; imageUrl?: string | null; hidden?: boolean }>;
+
+const DEFAULT_TAB_LABELS: TabLabelsContent = { details: 'Specifications', craft: 'Craft Story', care: 'Care' };
 
 function readLS<T>(key: string, fallback: T): T {
   try {
