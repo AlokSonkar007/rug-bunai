@@ -1,11 +1,11 @@
 import { Link } from 'react-router-dom';
 import { getProduct } from '../data/products';
-import { COLORS, colorHex, ROOMS } from '../data/vocabularies';
+import { ROOMS } from '../data/vocabularies';
 import { rugImage } from '../lib/rugArt';
 import { Reveal } from '../components/ProductCard';
 import Carousel from '../components/Carousel';
 import ProductRail from '../components/ProductRail';
-import { productsInCategory } from '../lib/search';
+import { colourPalette, productsInCategory } from '../lib/search';
 import { useCatalog } from '../lib/catalog';
 import { useSiteContent, type TileContent, type SplitBlockContent } from '../lib/siteContent';
 
@@ -40,6 +40,7 @@ export default function HomePage() {
 
   const bestSellers = products.filter((p) => p.bestSellerRank).slice(0, 6);
   const newArrivals = [...products].sort((a, b) => a.addedDaysAgo - b.addedDaysAgo).slice(0, 6);
+  const palette = colourPalette(products);
 
   const roomTiles = ROOMS.map((room, i) => ({
     room,
@@ -188,31 +189,39 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Shop by Colour — curated palette strip */}
-      <section className="wrap section" style={{ paddingTop: 0 }}>
-        <Reveal>
-          <div className="axis-head">
-            <div>
-              <p className="eyebrow">{content.colourBand.eyebrow}</p>
-              <h2 className="headline">{content.colourBand.title}</h2>
-              <p className="muted" style={{ marginTop: 10, maxWidth: '52ch' }}>{content.colourBand.sub}</p>
+      {/* Shop by Colour — premium house-palette discovery band */}
+      <section className="colour-band" aria-labelledby="colour-band-title">
+        <div className="colour-band-inner">
+          <Reveal>
+            <div className="colour-band-head">
+              <div>
+                <p className="eyebrow">{content.colourBand.eyebrow}</p>
+                <h2 className="headline" id="colour-band-title">{content.colourBand.title}</h2>
+                <p className="muted" style={{ marginTop: 10, maxWidth: '46ch' }}>{content.colourBand.sub}</p>
+              </div>
+              <Link to="/rugs" className="clear-all">Browse every colour →</Link>
             </div>
-            <Link to="/rugs" className="clear-all">All colours →</Link>
-          </div>
-        </Reveal>
-        <div className="colour-grid">
-          {COLORS.map((c, i) => {
-            const count = products.filter((p) => p.colorSlugs.includes(c.slug)).length;
-            return (
-              <Reveal key={c.slug} delay={Math.min(i, 8) * 50}>
-                <Link to={`/rugs?color=${c.slug}`} className="colour-card" aria-label={`Shop ${c.label} rugs`}>
-                  <span className="colour-dot" style={{ background: colorHex(c.slug) }} />
-                  <span className="colour-name">{c.label}</span>
-                  <span className="colour-count">{count} design{count === 1 ? '' : 's'}</span>
-                </Link>
-              </Reveal>
-            );
-          })}
+          </Reveal>
+          <ul className="colour-grid">
+            {palette.map((c, i) => (
+              <li key={c.slug}>
+                <Reveal delay={Math.min(i, 8) * 50}>
+                  <Link
+                    to={`/rugs?color=${encodeURIComponent(c.slug)}`}
+                    className={`colour-card${c.count === 0 ? ' is-quiet' : ''}`}
+                    aria-label={`Shop ${c.label} rugs${c.count > 0 ? ` — ${c.count} design${c.count === 1 ? '' : 's'} available` : ' — made to order'}`}
+                  >
+                    <span className="colour-swatch" aria-hidden="true" style={{ background: c.hex }} />
+                    <span className="colour-body">
+                      <span className="colour-name">{c.label}</span>
+                      <span className="colour-count">{c.count > 0 ? `${c.count} design${c.count === 1 ? '' : 's'}` : 'Made to order'}</span>
+                    </span>
+                    <span className="colour-go" aria-hidden="true">→</span>
+                  </Link>
+                </Reveal>
+              </li>
+            ))}
+          </ul>
         </div>
       </section>
 

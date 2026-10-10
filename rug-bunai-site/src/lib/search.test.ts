@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { PRODUCTS } from '../data/products';
-import { CARPET_CATEGORIES, carpetCategoryPath } from '../data/vocabularies';
+import { CARPET_CATEGORIES, carpetCategoryPath, COLORS, colorHex } from '../data/vocabularies';
 import {
+  colourPalette,
   EMPTY_FACETS,
   appliedChips,
   facetsFromSearch,
@@ -71,5 +72,59 @@ describe('category facet', () => {
   it('text search still works alongside other facets', () => {
     const { results } = runSearch({ ...EMPTY_FACETS, query: 'kashmiri' });
     expect(results.every((p) => `${p.name} ${p.tagline} ${p.description} ${p.craftStory}`.toLowerCase().includes('kashmiri'))).toBe(true);
+  });
+});
+
+describe('shop-by-colour palette integration', () => {
+  it('colourPalette derives every entry from the canonical vocabulary with real counts', () => {
+    const palette = colourPalette();
+    expect(palette.map((c) => c.slug)).toEqual(COLORS.map((c) => c.slug));
+    palette.forEach((entry) => {
+      const dict = COLORS.find((c) => c.slug === entry.slug)!;
+      expect(entry.hex).toBe(dict.hex);
+      expect(entry.label).toBe(dict.label);
+      expect(entry.count).toBe(PRODUCTS.filter((p) => p.colorSlugs.includes(entry.slug)).length);
+    });
+  });
+
+  it('palette swatch hexes are valid CSS colours (missing/invalid values stay safe)', () => {
+    for (const entry of colourPalette()) {
+      expect(entry.hex).toMatch(/^#[0-9A-Fa-f]{6}$/);
+    }
+    // Unknown slugs fall back to a defined neutral instead of crashing or rendering empty.
+    expect(colorHex('not-a-real-colour')).toBe('#A89684');
+  });
+
+  it('homepage-style colour link (?color=slug) filters the collection correctly', () => {
+    const stocked = colourPalette().find((c) => c.count > 0)!;
+    const sp = new URLSearchParams(`color=${encodeURIComponent(stocked.slug)}`);
+    const facets = facetsFromSearch(sp);
+    expect(facets.colors).toEqual([stocked.slug]);
+    const { results } = runSearch(facets);
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.every((p) => p.variants.some((v) => v.colorSlug === stocked.slug))).toBe(true);
+  });
+
+  it('colour selection composes with category, size and query filters', () => {
+    const color = PRODUCTS[0].variants[0].colorSlug;
+    const combined = { ...EMPTY_FACETS, colors: [color], sizeBucket: 'runner', query: 'zzz-no-match-zzz' };
+    expect(runSearch(combined).total).toBe(0); // AND across groups — no contradiction crashes
+    const ok = { ...EMPTY_FACETS, colors: [color] };
+    expect(runSearch(ok).results.every((p) => p.variants.some((v) => v.colorSlug === color))).toBe(true);
+  });
+
+  it('clearing the colour chip restores the broader catalogue', () => {
+    const stocked = colourPalette().find((c) => c.count > 0)!;
+    const f = facetsFromSearch(new URLSearchParams(`color=${stocked.slug}`));
+    const chip = appliedChips(f).find((c) => c.group === 'colors')!;
+    const cleared = removeChip(f, chip);
+    expect(cleared.colors).toEqual([]);
+    expect(runSearch(cleared).total).toBe(PRODUCTS.length);
+  });
+
+  it('unknown colour slugs degrade to an empty result set without crashing', () => {
+    const f = facetsFromSearch(new URLSearchParams('color=chartreuse-not-real'));
+    const { total } = runSearch(f);
+    expect(total).toBe(0);
   });
 });

@@ -134,7 +134,7 @@ export const DEFAULT_CONTENT: SiteContent = {
   colourBand: {
     eyebrow: 'Shop by Colour',
     title: 'Find your palette',
-    sub: 'Nine normalised house colours — tap one to see every design woven in that shade.',
+    sub: 'The house palette, drawn straight from our looms — choose a shade to see every design woven in it.',
   },
   newsletter: {
     eyebrow: 'The Loom Letter',

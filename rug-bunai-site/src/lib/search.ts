@@ -263,6 +263,28 @@ export function removeChip(f: FacetState, chip: Chip): FacetState {
 // ── Category browsing (dual-axis taxonomy) --------------------------------------------
 // A product may live on several category paths without duplication in the data model.
 
+/**
+ * House-colour palette entry for the homepage "Shop by Colour" experience.
+ * Derived from the canonical COLORS vocabulary and the live catalogue, so a
+ * colour is only surfaced with its real design count (colours with zero
+ * designs render as quiet "made-to-order" options rather than dead ends).
+ */
+export interface ColourPaletteEntry {
+  readonly slug: string;
+  readonly label: string;
+  readonly hex: string;
+  readonly count: number;
+}
+
+export function colourPalette(products: readonly Product[] = PRODUCTS): ColourPaletteEntry[] {
+  return COLORS.map((c) => ({
+    slug: c.slug,
+    label: c.label,
+    hex: c.hex,
+    count: products.filter((p) => p.colorSlugs.includes(c.slug)).length,
+  }));
+}
+
 export function productsInCategory(path: string): Product[] {
   return PRODUCTS.filter((p) => p.categoryPaths.includes(path));
 }
