@@ -16,6 +16,7 @@ import { AuthProvider } from './lib/auth';
 import { CatalogProvider } from './lib/catalog';
 import { CartProvider } from './lib/cart';
 import { WishlistProvider } from './lib/wishlist';
+import { SiteContentProvider } from './lib/siteContent';
 import './index.css';
 
 const router = createBrowserRouter([
@@ -44,13 +45,15 @@ const router = createBrowserRouter([
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AuthProvider>
-      <CatalogProvider>
-        <CartProvider>
-          <WishlistProvider>
-            <RouterProvider router={router} />
-          </WishlistProvider>
-        </CartProvider>
-      </CatalogProvider>
+      <SiteContentProvider>
+        <CatalogProvider>
+          <CartProvider>
+            <WishlistProvider>
+              <RouterProvider router={router} />
+            </WishlistProvider>
+          </CartProvider>
+        </CatalogProvider>
+      </SiteContentProvider>
     </AuthProvider>
   </StrictMode>,
 );
