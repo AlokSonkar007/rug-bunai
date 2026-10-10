@@ -319,7 +319,7 @@ function HeroSlidesEditor({ onUpload }: { onUpload: (file: File) => Promise<stri
       <div className="axis-head" style={{ marginBottom: 14 }}>
         <h3 className="subhead">Hero slideshow</h3>
         <div role="tablist" aria-label="Choose hero slide" style={{ display: 'flex', gap: 8 }}>
-          {content.heroSlides.map((s, i) => (
+          {content.heroSlides.map((_, i) => (
             <button key={i} role="tab" aria-selected={i === idx} className={`tab ${i === idx ? 'active' : ''}`} onClick={() => setIdx(i)}>
               Slide {i + 1}
             </button>
@@ -603,12 +603,72 @@ function SharedContentEditor() {
   );
 }
 
+/** Homepage tab — every displayed homepage section, grouped in order. */
+function HomepageContentEditor({ onUpload }: { onUpload: (f: File) => Promise<string> }) {
+  return (
+    <div style={{ display: 'grid', gap: 18 }}>
+      <HeroSlidesEditor onUpload={onUpload} />
+      <RailEditor which="newArrivalsRail" idPrefix="rail-new" />
+      <RailEditor which="bestSellersRail" idPrefix="rail-best" />
+      <BandEditor path="techniqueHeading" idPrefix="technique-heading" labels={{ heading: 'Technique & material heading', eyebrow: 'Eyebrow', title: 'Title' }} />
+      <TilesEditor which="techniqueTiles" idPrefix="technique-tiles" />
+      <SplitBlockEditor which="craftSplit" idPrefix="craft-split" onUpload={onUpload} />
+      <BandEditor path="roomsBand" idPrefix="rooms-band" labels={{ heading: 'Rooms band heading', eyebrow: 'Eyebrow', title: 'Title' }} />
+      <TilesEditor which="roomTiles" idPrefix="room-tiles" />
+      <SplitBlockEditor which="inspirationSplit" idPrefix="inspiration-split" onUpload={onUpload} />
+      <BandEditor path="colourBand" idPrefix="colour-band" labels={{ heading: 'Shop by Colour section', eyebrow: 'Eyebrow', title: 'Title', sub: 'Supporting text' }} />
+      <BandEditor path="newsletter" idPrefix="newsletter" labels={{ heading: 'Newsletter section', eyebrow: 'Eyebrow', title: 'Title', note: 'Note' }} />
+    </div>
+  );
+}
+
+/** Products-content tab — searchable picker; editorial fields per product. */
+function ProductsContentTab() {
+  const { products } = useCatalog();
+  const { uploadProductPhoto } = useCatalog();
+  const [query, setQuery] = useState('');
+  const [selectedSlug, setSelectedSlug] = useState<string>('');
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return products.filter((p) => !q || p.name.toLowerCase().includes(q) || p.slug.includes(q));
+  }, [products, query]);
+  const selected = filtered.find((p) => p.slug === selectedSlug) ?? filtered[0] ?? null;
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 300px) 1fr', gap: 22, alignItems: 'start' }}>
+      <div className="summary-card" style={{ padding: 14 }}>
+        <label htmlFor="product-search" className="muted" style={{ fontSize: '0.78rem' }}>Search products</label>
+        <input id="product-search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="name or /url-name" style={{ marginTop: 6 }} />
+        <ul style={{ listStyle: 'none', padding: 0, margin: '12px 0 0', display: 'grid', gap: 4, maxHeight: 420, overflowY: 'auto' }}>
+          {filtered.map((p) => (
+            <li key={p.id}>
+              <button
+                type="button"
+                className="clear-all"
+                style={{ fontWeight: selected?.slug === p.slug ? 700 : 500, textAlign: 'left', width: '100%', padding: '8px 10px' }}
+                aria-current={selected?.slug === p.slug ? 'true' : undefined}
+                onClick={() => setSelectedSlug(p.slug)}
+              >
+                {p.name}
+              </button>
+            </li>
+          ))}
+          {filtered.length === 0 && <li className="muted" style={{ fontSize: '0.82rem', padding: 8 }}>No products match “{query}”.</li>}
+        </ul>
+      </div>
+      {selected ? (
+        <ProductContentEditor key={selected.slug} product={selected} onUpload={uploadProductPhoto} />
+      ) : (
+        <p className="muted">Select a product to edit its page content.</p>
+      )}
+    </div>
+  );
+}
+
 /** Admin Studio — product management + full website content management. */
 export default function AdminPage() {
-  const [tab, setTab] = useState<'products' | 'content'>('products');
+  const [tab, setTab] = useState<'products' | 'homepage' | 'collections' | 'product-content' | 'shared'>('products');
   const { profile, configured } = useAuth();
   const { products, loading, uploadProductPhoto, createManagedProduct, removeProduct, changeProductPhoto, saveProductColours } = useCatalog();
-  const site = useSiteContent();
   const [form, setForm] = useState(initialForm);
   const [newPhoto, setNewPhoto] = useState<File | null>(null);
   const [newColours, setNewColours] = useState<ProductColourOption[]>([]);
@@ -724,9 +784,25 @@ export default function AdminPage() {
   return (
     <div className="wrap section">
       <p className="eyebrow">Rug Bunai studio</p>
-      <h1 className="display" style={{ marginTop: 10 }}>Product management</h1>
-      <p className="muted" style={{ marginTop: 12 }}>Add catalogue pieces, remove products, or replace product photography.</p>
+      <h1 className="display" style={{ marginTop: 10 }}>Studio &amp; website content</h1>
+      <p className="muted" style={{ marginTop: 12 }}>Manage the catalogue and edit the text &amp; images shown across the public website. Changes save to Supabase and appear for every visitor.</p>
 
+      <div role="tablist" aria-label="Studio sections" className="studio-tabs">
+        {([
+          ['products', 'Products'],
+          ['homepage', 'Homepage'],
+          ['collections', 'Collections'],
+          ['product-content', 'Product pages'],
+          ['shared', 'Shared & footer'],
+        ] as const).map(([key, label]) => (
+          <button key={key} role="tab" aria-selected={tab === key} className={`tab ${tab === key ? 'active' : ''}`} onClick={() => setTab(key)}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'products' && (
+      <div>
       <form onSubmit={addProduct} className="summary-card" style={{ marginTop: 30, maxWidth: 760 }}>
         <h2 className="subhead" style={{ marginBottom: 18 }}>Add a product</h2>
         <div className="form-grid-2">
@@ -789,6 +865,13 @@ export default function AdminPage() {
           ))}
         </div>
       </section>
+      </div>
+      )}
+
+      {tab === 'homepage' && <div style={{ marginTop: 30 }}><HomepageContentEditor onUpload={uploadProductPhoto} /></div>}
+      {tab === 'collections' && <div style={{ marginTop: 30 }}><CollectionsEditor onUpload={uploadProductPhoto} /></div>}
+      {tab === 'product-content' && <div style={{ marginTop: 30 }}><ProductsContentTab /></div>}
+      {tab === 'shared' && <div style={{ marginTop: 30 }}><SharedContentEditor /></div>}
     </div>
   );
 }
