@@ -11,8 +11,10 @@ import {
   colourLabelFor, isValidHex, normalizeHex, resolveColourOptions,
   type CustomColourRequest, type ProductColourOption,
 } from '../lib/colours';
+import { SIZE_OPTIONS, feetOf, validateSizeFeet, customSizeEstimate, formatFtLabel } from '../lib/sizes';
 
 const CUSTOM_SENTINEL = '__custom__';
+const CUSTOM_SIZE_KEY = 'custom';
 
 /**
  * PDP — where conversion happens. Interactive gallery with macro angles,
@@ -35,12 +37,20 @@ export default function ProductPage() {
   const [customOpen, setCustomOpen] = useState(false);
   const [customHex, setCustomHex] = useState('#B0714F');
   const [customName, setCustomName] = useState('');
+  // Custom-SIZE request state (revealed by the sixth size option). Dimensions
+  // are numeric feet; nothing is priced or added until validation passes.
+  const [sizeChoice, setSizeChoice] = useState<string | null>(null); // variant id | 'custom'
+  const [custW, setCustW] = useState('');
+  const [custL, setCustL] = useState('');
   const cart = useCart();
 
   useEffect(() => {
     if (!product) return;
     setColor(product.colorSlugs[0]);
     setVariantId(null);
+    setSizeChoice(null);
+    setCustW('');
+    setCustL('');
     setAngle(0);
     // Switching rugs must never carry a previous rug's colour selection over.
     setCustomOpen(false);
@@ -66,10 +76,33 @@ export default function ProductPage() {
     if (color === CUSTOM_SENTINEL) return product.variants;
     return product.variants.filter((v) => v.colorSlug === color);
   }, [product, color]);
-  const selected =
-    product?.variants.find((v) => v.id === variantId) ??
-    variantsInColor.find((v) => v.stock > 0) ??
-    variantsInColor[0];
+  const selected = sizeChoice === CUSTOM_SIZE_KEY
+    ? undefined
+    : product?.variants.find((v) => v.id === (sizeChoice ?? variantId)) ??
+      variantsInColor.find((v) => v.stock > 0) ??
+      variantsInColor[0];
+
+  // ── Custom-size request logic (sixth selector option) ──────────────────
+  const choosingCustomSize = sizeChoice === CUSTOM_SIZE_KEY;
+  const customDims = useMemo(() => {
+    const w = custW.trim() === '' ? NaN : Number(custW);
+    const l = custL.trim() === '' ? NaN : Number(custL);
+    const error = custW.trim() === '' || custL.trim() === ''
+      ? 'Enter both width and length in feet.'
+      : validateSizeFeet(w, l);
+    return { w, l, valid: error === null, error };
+  }, [custW, custL]);
+  /** Estimate derived from this rug's own rate card (base price ÷ base area).
+   *  The studio confirms before production — no invented markup, no silent
+   *  fallback to a standard-size price. */
+  const customEstimate = useMemo(() => {
+    if (!product || !customDims.valid) return null;
+    const base = product.variants.find((v) => v.priceInr > 0) ?? product.variants[0];
+    if (!base || base.priceInr <= 0) return null;
+    return customSizeEstimate(
+      base.priceInr, feetOf(base.width), feetOf(base.length), customDims.w, customDims.l,
+    );
+  }, [product, customDims]);
 
   if (!product) {
     return (
@@ -102,6 +135,26 @@ export default function ProductPage() {
     : (colourOptions.find((c) => c.slug === color)?.label ?? colourLabelFor(color));
 
   const addToCart = () => {
+    if (choosingCustomSize) {
+      // Custom-size request: validated numeric feet only — never a silently
+      // mispriced purchase. The studio confirms the estimate before weaving.
+      if (!customDims.valid) { notify(customDims.error ?? 'Enter valid dimensions in feet.'); return; }
+      if (customEstimate === null) { notify('This piece needs a studio quote for custom sizes — please contact us on WhatsApp.'); return; }
+      cart.addCustom(product, {
+        id: 'custom-' + crypto.randomUUID(),
+        productSlug: product.slug,
+        sizeLabel: formatFtLabel(customDims.w, customDims.l),
+        widthFt: customDims.w,
+        lengthFt: customDims.l,
+        colorSlug: usingCustom ? 'custom' : color,
+        colorName: currentColourLabel,
+        ...(usingCustom && selectedCustom ? { colorHex: selectedCustom.hex } : {}),
+        priceInr: customEstimate,
+        note: `Custom size request: ${formatFtLabel(customDims.w, customDims.l)} (≈ ${Math.round(customDims.w * customDims.l)} sq ft). Estimate ${formatINR(customEstimate)} at this rug's derived ₹/sq ft rate — production feasibility and final pricing to be confirmed by Rug Bunai before weaving.${usingCustom ? ` Custom colour: ${currentColourLabel}.` : ''}`,
+      });
+      notify(`Custom-size request added — ${formatFtLabel(customDims.w, customDims.l)}`);
+      return;
+    }
     if (usingCustom) {
       if (!selectedCustom) { notify('Choose a valid custom colour first.'); return; }
       if (!selected) { notify('Select a size for your custom-colour piece.'); return; }
@@ -111,8 +164,8 @@ export default function ProductPage() {
         id: 'custom-' + crypto.randomUUID(),
         productSlug: product.slug,
         sizeLabel: selected.sizeLabel,
-        widthFt: selected.width.in / 12,
-        lengthFt: selected.length.in / 12,
+        widthFt: feetOf(selected.width),
+        lengthFt: feetOf(selected.length),
         colorSlug: 'custom',
         colorName: currentColourLabel,
         colorHex: selectedCustom.hex,
@@ -252,31 +305,104 @@ export default function ProductPage() {
             )}
           </div>
 
-          {/* Size pills (child variants) */}
+          {/* Size selector — five standard sizes + custom-size request */}
           <div style={{ marginTop: 24 }}>
-            <p className="eyebrow" style={{ marginBottom: 4 }}>Size — metric &amp; imperial</p>
-            <div className="variant-row">
-              {variantsInColor.map((v) => (
-                <button
-                  key={v.id}
-                  className={`size-pill ${selected?.id === v.id ? 'active' : ''} ${v.stock === 0 ? 'oos' : ''}`}
-                  aria-pressed={selected?.id === v.id}
-                  onClick={() => setVariantId(v.id)}
-                >
-                  <span>{v.sizeLabel}</span>
-                  <small>{v.stock === 0 ? 'Sold out' : `${formatINR(v.priceInr)} · ${v.stock} in atelier`}</small>
-                </button>
-              ))}
+            <p className="eyebrow" style={{ marginBottom: 4 }}>Size — feet</p>
+            <div className="variant-row" role="group" aria-label="Choose a size">
+              {SIZE_OPTIONS.map((s) => {
+                if (s.custom) {
+                  return (
+                    <button
+                      key={s.key}
+                      type="button"
+                      className={`size-pill ${choosingCustomSize ? 'active' : ''}`}
+                      aria-pressed={choosingCustomSize}
+                      onClick={() => setSizeChoice(CUSTOM_SIZE_KEY)}
+                    >
+                      <span>{s.label}</span>
+                      <small>Weave to your own dimensions</small>
+                    </button>
+                  );
+                }
+                const v = variantsInColor.find((cand) => cand.sizeLabel === s.label);
+                return (
+                  <button
+                    key={s.key}
+                    type="button"
+                    className={`size-pill ${!choosingCustomSize && selected?.sizeLabel === s.label ? 'active' : ''} ${v && v.stock === 0 ? 'oos' : ''}`}
+                    aria-pressed={!choosingCustomSize && selected?.sizeLabel === s.label}
+                    disabled={!v}
+                    title={v ? undefined : `${s.label} is not offered on this design`}
+                    onClick={() => {
+                      if (!v) return;
+                      setSizeChoice(v.id);
+                      setVariantId(v.id);
+                    }}
+                  >
+                    <span>{s.label}</span>
+                    <small>{v ? (v.stock === 0 ? 'Sold out' : `${formatINR(v.priceInr)} · ${v.stock} in atelier`) : 'Not offered'}</small>
+                  </button>
+                );
+              })}
             </div>
+
+            {choosingCustomSize && (
+              <div className="pdp-custom" style={{ marginTop: 14 }}>
+                <p className="subhead" style={{ fontSize: '0.9rem', marginBottom: 8 }}>Enter your size (ft)</p>
+                <div className="pdp-custom-row" style={{ alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <span className="muted" style={{ fontSize: '0.75rem' }}>Width (ft)</span>
+                    <input
+                      className="pdp-custom-name"
+                      type="number" inputMode="decimal" min={1} max={15} step={0.1}
+                      aria-label="Custom width in feet" placeholder="e.g. 7.5"
+                      value={custW} onChange={(e) => setCustW(e.target.value)}
+                    />
+                  </label>
+                  <span aria-hidden="true" className="subhead">×</span>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <span className="muted" style={{ fontSize: '0.75rem' }}>Length (ft)</span>
+                    <input
+                      className="pdp-custom-name"
+                      type="number" inputMode="decimal" min={1} max={15} step={0.1}
+                      aria-label="Custom length in feet" placeholder="e.g. 9.5"
+                      value={custL} onChange={(e) => setCustL(e.target.value)}
+                    />
+                  </label>
+                  <code className="colour-editor-hex" aria-live="polite">
+                    {customDims.valid ? formatFtLabel(customDims.w, customDims.l) : '___ × ___ ft'}
+                  </code>
+                </div>
+                {customDims.error && custW.trim() !== '' && custL.trim() !== '' && (
+                  <p className="field-error" style={{ fontSize: '0.8rem', marginTop: 6 }}>{customDims.error}</p>
+                )}
+                {customDims.valid && customEstimate !== null && (
+                  <p className="muted" style={{ fontSize: '0.85rem', marginTop: 8 }}>
+                    Estimate: <strong>{formatINR(customEstimate)}</strong> ≈ {Math.round(customDims.w * customDims.l)} sq ft at this rug's derived ₹/sq ft rate.
+                  </p>
+                )}
+                {customDims.valid && customEstimate === null && (
+                  <p className="field-error" style={{ fontSize: '0.8rem', marginTop: 8 }}>
+                    No online estimate is available for this piece — please request a studio quote via WhatsApp before ordering.
+                  </p>
+                )}
+                <p className="muted pdp-custom-note">
+                  This is a <strong>custom-size request</strong>, not a guaranteed delivery. Rug Bunai will confirm
+                  production feasibility and final pricing before weaving begins.
+                </p>
+              </div>
+            )}
           </div>
 
           <button
             className="btn btn-solid btn-block"
             style={{ marginTop: 30 }}
-            disabled={usingCustom ? !selectedCustom || !selected : !selected || selected.stock === 0}
+            disabled={choosingCustomSize ? !customDims.valid || customEstimate === null : usingCustom ? !selectedCustom || !selected : !selected || selected.stock === 0}
             onClick={addToCart}
           >
-            {usingCustom
+            {choosingCustomSize
+              ? 'Add Custom-Size Request'
+              : usingCustom
               ? 'Add Custom-Colour Request'
               : selected && selected.stock === 0 ? 'Notify me when rewoven' : 'Add to Cart'}
           </button>
@@ -320,7 +446,7 @@ export default function ProductPage() {
                 )}
                 <tr><th scope="row">Backing</th><td>{product.specs.backing}</td></tr>
                 <tr><th scope="row">Origin</th><td>{product.specs.countryOfOrigin}</td></tr>
-                <tr><th scope="row">Current size</th><td>{selected ? `${selected.width.cm} × ${selected.length.cm} cm (${selected.width.in}″ × ${selected.length.in}″)` : 'Select a size'}</td></tr>
+                <tr><th scope="row">Current size</th><td>{choosingCustomSize ? (customDims.valid ? `${formatFtLabel(customDims.w, customDims.l)} — custom request` : 'Enter your custom dimensions') : selected ? `${selected.sizeLabel} (${selected.width.cm} × ${selected.length.cm} cm)` : 'Select a size'}</td></tr>
               </tbody>
             </table>
           )}
