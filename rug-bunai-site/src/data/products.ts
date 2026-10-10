@@ -79,6 +79,12 @@ export interface Product {
   readonly craftStory: string;
   /** Parent-level list of normalised colours across all variants. */
   readonly colorSlugs: readonly string[];
+  /**
+   * Admin-managed colour options for this rug (Studio > Colours). When
+   * present, the PDP shows these swatches instead of deriving them from
+   * `colorSlugs`. Optional so existing catalogue records stay valid.
+   */
+  readonly colourOptions?: readonly import('../lib/colours').ProductColourOption[];
   readonly materialSlug: string;
   readonly techniqueSlug: string;
   readonly styleSlugs: readonly string[];
