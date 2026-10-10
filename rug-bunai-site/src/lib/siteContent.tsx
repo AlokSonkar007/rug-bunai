@@ -224,7 +224,7 @@ const LS_OVERRIDES = 'rugbunai-product-overrides-v1';
  * like pile height or knot density are never touched by content edits.
  */
 export type TextOverride = Partial<Pick<Product, 'name' | 'tagline' | 'description' | 'craftStory' | 'colorSlugs' | 'colourOptions'>>
-  & { specs?: { careInstructions?: string } };
+  & { specs?: { careInstructions?: string }; customRatePerSqFt?: number | null; /** Admin copy for the PDP Specifications table. */ specNotes?: string };
 export type ProductOverrideMap = Record<string, { text?: TextOverride; imageUrl?: string | null; homeImageUrl?: string | null; hidden?: boolean }>;
 
 function readLS<T>(key: string, fallback: T): T {

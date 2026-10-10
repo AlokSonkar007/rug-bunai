@@ -4,6 +4,7 @@ import { formatINR } from '../data/products';
 import { CLASSIFICATIONS, findTerm, MATERIALS, TECHNIQUES } from '../data/vocabularies';
 import { productImage } from '../lib/images';
 import { useCatalog } from '../lib/catalog';
+import { useSiteContent } from '../lib/siteContent';
 import { useWishlist } from '../lib/wishlist';
 import { useCart } from '../lib/cart';
 import { ProductCard, Reveal } from '../components/ProductCard';
@@ -11,7 +12,10 @@ import {
   colourLabelFor, isValidHex, normalizeHex, resolveColourOptions,
   type CustomColourRequest, type ProductColourOption,
 } from '../lib/colours';
-import { SIZE_OPTIONS, feetOf, validateSizeFeet, customSizeEstimate, formatFtLabel } from '../lib/sizes';
+import {
+  SIZE_OPTIONS, STANDARD_SIZE_KEYS, feetOf, validateSizeFeet, customSizeEstimate, formatFtLabel,
+  productRatePerSqft, resolveStandardSize, type ResolvedSize,
+} from '../lib/sizes';
 
 const CUSTOM_SENTINEL = '__custom__';
 const CUSTOM_SIZE_KEY = 'custom';
@@ -76,14 +80,54 @@ export default function ProductPage() {
     if (color === CUSTOM_SENTINEL) return product.variants;
     return product.variants.filter((v) => v.colorSlug === color);
   }, [product, color]);
-  const selected = sizeChoice === CUSTOM_SIZE_KEY
-    ? undefined
-    : product?.variants.find((v) => v.id === (sizeChoice ?? variantId)) ??
-      variantsInColor.find((v) => v.stock > 0) ??
-      variantsInColor[0];
+
+  // Trusted ₹/sq-ft rate for this rug: admin-configured customRatePerSqFt when
+  // present, otherwise derived from its own priced offers. Never invented.
+  const ratePerSqFt = useMemo(
+    () => (product ? productRatePerSqft(product.variants, product.customRatePerSqFt ?? null) : null),
+    [product],
+  );
+
+  // Every design resolves all five standard sizes against real offer data:
+  // exact configured price first, then made-to-order at the trusted rate.
+  const resolvedSizes = useMemo<Record<string, ResolvedSize>>(() => {
+    const map: Record<string, ResolvedSize> = {};
+    if (!product) return map;
+    const colorSlug = usingCustom ? (product.colorSlugs[0] ?? 'ivory') : color;
+    for (const option of SIZE_OPTIONS) {
+      if (option.custom) continue;
+      map[option.key] = resolveStandardSize(option, variantsInColor, ratePerSqFt, { slug: product.slug, colorSlug });
+    }
+    return map;
+  }, [product, variantsInColor, ratePerSqFt, usingCustom, color]);
 
   // ── Custom-size request logic (sixth selector option) ──────────────────
   const choosingCustomSize = sizeChoice === CUSTOM_SIZE_KEY;
+
+  const selectedKey = choosingCustomSize ? null : (sizeChoice ?? variantId ? String(sizeChoice ?? variantId) : null);
+  const selectedResolved: ResolvedSize | undefined = (() => {
+    if (!product || choosingCustomSize) return undefined;
+    // An explicit pill selection wins.
+    if (selectedKey) {
+      const direct = Object.values(resolvedSizes).find((r) => r.variant?.id === selectedKey);
+      if (direct) return direct;
+    }
+    // Default: in-stock offer, else first priceable size (made-to-order ok).
+    const ordered = STANDARD_SIZE_KEYS.map((k) => resolvedSizes[k]).filter(Boolean);
+    return ordered.find((r) => r.availability === 'stock') ?? ordered.find((r) => r.priceable) ?? ordered[0];
+  })();
+  const selected = selectedResolved?.variant;
+
+  // Admin-authored Specifications notes for this product (Studio > Product
+  // Pages). Read from the same persisted override document the editors write.
+  const { productOverrides } = useSiteContent();
+  const ovText = product ? productOverrides[product.slug]?.text : undefined;
+  const ovSpecNotes = (ovText?.specNotes ?? '').trim();
+  // Admin-saved Craft Story / Care override the seed content; unedited
+  // products keep displaying their original catalogue text.
+  const craftStoryText = (ovText?.craftStory ?? '').trim() || (product?.craftStory ?? '');
+  const careText = (ovText?.specs?.careInstructions ?? '').trim() || (product?.specs.careInstructions ?? '');
+
   const customDims = useMemo(() => {
     const w = custW.trim() === '' ? NaN : Number(custW);
     const l = custL.trim() === '' ? NaN : Number(custL);
@@ -176,6 +220,26 @@ export default function ProductPage() {
       return;
     }
     if (!selected) return;
+    // Made-to-order standard size (no configured offer record): the rug is
+    // genuinely woven on request at the trusted rate — persisted as a custom
+    // offer so the exact dimensions and price survive into the order.
+    const resolved = Object.values(resolvedSizes).find((r) => r.variant?.id === selected.id);
+    if (resolved && !product.variants.some((v) => v.id === selected.id)) {
+      cart.addCustom(product, {
+        id: selected.id,
+        productSlug: product.slug,
+        sizeLabel: selected.sizeLabel,
+        widthFt: feetOf(selected.width),
+        lengthFt: feetOf(selected.length),
+        colorSlug: usingCustom ? 'custom' : color,
+        colorName: currentColourLabel,
+        ...(usingCustom && selectedCustom ? { colorHex: selectedCustom.hex } : {}),
+        priceInr: selected.priceInr,
+        note: `Made-to-order: ${selected.sizeLabel} in ${currentColourLabel}. Woven on request at this design's ₹/sq ft rate — atelier confirms dispatch window after order review.`,
+      });
+      notify(`Added ${product.name} — ${selected.sizeLabel} (made to order)`);
+      return;
+    }
     cart.add(selected.id);
     notify(`Added ${product.name} — ${selected.sizeLabel} to your cart`);
   };
@@ -305,7 +369,9 @@ export default function ProductPage() {
             )}
           </div>
 
-          {/* Size selector — five standard sizes + custom-size request */}
+          {/* Size selector — five standard sizes + custom-size request.
+              Every design is woven in all five standard sizes; a missing
+              offer record means made-to-order, never "not offered". */}
           <div style={{ marginTop: 24 }}>
             <p className="eyebrow" style={{ marginBottom: 4 }}>Size — feet</p>
             <div className="variant-row" role="group" aria-label="Choose a size">
@@ -324,23 +390,30 @@ export default function ProductPage() {
                     </button>
                   );
                 }
-                const v = variantsInColor.find((cand) => cand.sizeLabel === s.label);
+                const r = resolvedSizes[s.key];
+                const isActive = !choosingCustomSize && selectedResolved?.option.key === s.key;
+                const priceText = r?.variant && r.priceable ? formatINR(r.variant.priceInr) : null;
+                const availabilityText = !r || !r.priceable
+                  ? 'Studio quote'
+                  : r.availability === 'stock'
+                  ? `${r.variant!.stock} in atelier`
+                  : 'Made to order';
                 return (
                   <button
                     key={s.key}
                     type="button"
-                    className={`size-pill ${!choosingCustomSize && selected?.sizeLabel === s.label ? 'active' : ''} ${v && v.stock === 0 ? 'oos' : ''}`}
-                    aria-pressed={!choosingCustomSize && selected?.sizeLabel === s.label}
-                    disabled={!v}
-                    title={v ? undefined : `${s.label} is not offered on this design`}
+                    className={`size-pill ${isActive ? 'active' : ''} ${r && r.availability === 'stock' ? '' : 'mto'}`}
+                    aria-pressed={isActive}
+                    disabled={!r}
+                    title={r?.priceable ? undefined : `${s.label} needs a studio quote for this design`}
                     onClick={() => {
-                      if (!v) return;
-                      setSizeChoice(v.id);
-                      setVariantId(v.id);
+                      if (!r?.variant) return;
+                      setSizeChoice(r.variant.id);
+                      setVariantId(r.variant.id);
                     }}
                   >
                     <span>{s.label}</span>
-                    <small>{v ? (v.stock === 0 ? 'Sold out' : `${formatINR(v.priceInr)} · ${v.stock} in atelier`) : 'Not offered'}</small>
+                    <small>{priceText ? `${priceText} · ${availabilityText}` : availabilityText}</small>
                   </button>
                 );
               })}
@@ -397,14 +470,14 @@ export default function ProductPage() {
           <button
             className="btn btn-solid btn-block"
             style={{ marginTop: 30 }}
-            disabled={choosingCustomSize ? !customDims.valid || customEstimate === null : usingCustom ? !selectedCustom || !selected : !selected || selected.stock === 0}
+            disabled={choosingCustomSize ? !customDims.valid || customEstimate === null : usingCustom ? !selectedCustom || !selected : !selected}
             onClick={addToCart}
           >
             {choosingCustomSize
               ? 'Add Custom-Size Request'
               : usingCustom
               ? 'Add Custom-Colour Request'
-              : selected && selected.stock === 0 ? 'Notify me when rewoven' : 'Add to Cart'}
+              : selectedResolved?.availability === 'made-to-order' ? 'Add Made-to-Order Piece' : 'Add to Cart'}
           </button>
           <button
             className="btn btn-block"
@@ -447,19 +520,25 @@ export default function ProductPage() {
                 <tr><th scope="row">Backing</th><td>{product.specs.backing}</td></tr>
                 <tr><th scope="row">Origin</th><td>{product.specs.countryOfOrigin}</td></tr>
                 <tr><th scope="row">Current size</th><td>{choosingCustomSize ? (customDims.valid ? `${formatFtLabel(customDims.w, customDims.l)} — custom request` : 'Enter your custom dimensions') : selected ? `${selected.sizeLabel} (${selected.width.cm} × ${selected.length.cm} cm)` : 'Select a size'}</td></tr>
+                {product.customRatePerSqFt != null && product.customRatePerSqFt > 0 && (
+                  <tr><th scope="row">Bespoke rate</th><td>₹{Math.round(product.customRatePerSqFt).toLocaleString('en-IN')} per sq ft (studio-configured)</td></tr>
+                )}
+                {ovSpecNotes && (
+                  <tr><th scope="row">Atelier notes</th><td>{ovSpecNotes}</td></tr>
+                )}
               </tbody>
             </table>
           )}
           {tab === 'craft' && (
             <div>
               <p className="muted">{product.description}</p>
-              <blockquote className="pull-quote" style={{ marginBlock: 26 }}>{product.craftStory}</blockquote>
+              <blockquote className="pull-quote" style={{ marginBlock: 26 }}>{craftStoryText}</blockquote>
               <Link to="/journal/persian-vs-turkish-knot" className="clear-all">Learn the knot languages →</Link>
             </div>
           )}
           {tab === 'care' && (
             <div>
-              <p className="muted">{product.specs.careInstructions}</p>
+              <p className="muted">{careText}</p>
               <ul style={{ marginTop: 16 }}>
                 {[
                   'Use a natural-fibre underlay to prevent slippage and pile crush.',

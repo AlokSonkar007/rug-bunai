@@ -232,6 +232,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
         ...product,
         ...textRest,
         ...(specPatch ? { specs: { ...product.specs, ...specPatch } } : {}),
+        ...(ov.text?.customRatePerSqFt !== undefined ? { customRatePerSqFt: ov.text.customRatePerSqFt } : {}),
         imageUrl: ov.imageUrl !== undefined ? ov.imageUrl : product.imageUrl,
         homeImageUrl: ov.homeImageUrl ?? null,
       };

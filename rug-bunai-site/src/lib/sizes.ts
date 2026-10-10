@@ -52,6 +52,9 @@ export const CUSTOM_SIZE = SIZE_OPTIONS[SIZE_OPTIONS.length - 1];
 export const sizeByKey = (key: string): SizeOption | undefined =>
   SIZE_OPTIONS.find((s) => s.key === key);
 
+/** The five standard size keys — the sixth option is always custom. */
+export const STANDARD_SIZE_KEYS = SIZE_OPTIONS.filter((s) => !s.custom).map((s) => s.key);
+
 /** Human label for any size pair, preferring exact canonical matches. */
 export function sizeLabelFor(widthFt: number, lengthFt: number): string {
   const match = SIZE_OPTIONS.find(
@@ -140,6 +143,97 @@ export function validateSizeFeet(w: number, l: number): string | null {
 export function customSizeEstimate(basePriceInr: number, baseW: number, baseL: number, w: number, l: number): number {
   const rate = ratePerSqft(basePriceInr, build('tmp', baseW, baseL));
   return Math.round(rate * w * l);
+}
+
+// ── Size-availability resolution (single source of truth) ────────────────────
+// Rug Bunai weaves every design to order in all five standard sizes. A missing
+// variant record therefore means "not currently stocked", NOT "not offered".
+// Prices come from real configured data only: an exact offer match first, then
+// this rug's own trusted ₹/sq-ft rate (admin-configured `customRatePerSqFt`
+// when present, otherwise the rate derived from its priced variants). Nothing
+// here ever invents a price — if the product has no priced variants at all the
+// size resolves as quote-only and the purchase flow must block it.
+
+export interface ResolvedSize {
+  readonly option: SizeOption;
+  /** Existing configured offer, when this size×colour is already recorded. */
+  readonly variant?: VariantLike;
+  /** True when a price could be resolved from trusted data (never invented). */
+  readonly priceable: boolean;
+  /** 'stock' → offer exists with stock; 'made-to-order' → woven on request;
+   *  'quote' → no trusted pricing, studio quote required before ordering. */
+  readonly availability: 'stock' | 'made-to-order' | 'quote';
+}
+
+interface VariantLike {
+  readonly id: string;
+  readonly sku: string;
+  readonly sizeLabel: string;
+  readonly width: { cm: number; in: number };
+  readonly length: { cm: number; in: number };
+  readonly colorSlug: string;
+  readonly priceInr: number;
+  readonly stock: number;
+}
+
+/** Trusted ₹/sq-ft rate for a product: admin override first, else derived. */
+export function productRatePerSqft(
+  variants: readonly VariantLike[],
+  customRatePerSqFt?: number | null,
+): number | null {
+  if (typeof customRatePerSqFt === 'number' && Number.isFinite(customRatePerSqFt) && customRatePerSqFt > 0) {
+    return Math.round(customRatePerSqFt);
+  }
+  const priced = variants.find((v) => v.priceInr > 0);
+  if (!priced) return null;
+  return ratePerSqft(priced.priceInr, build('tmp', feetOf(priced.width), feetOf(priced.length)));
+}
+
+/** Synthesised made-to-order variant id — deterministic per size×colour. */
+export const mtoVariantId = (slug: string, sizeKey: string, colorSlug: string) =>
+  `mto-${slug}-${sizeKey}-${colorSlug}`;
+
+/** Resolve one standard size for a product against its real offers. */
+export function resolveStandardSize(
+  option: SizeOption,
+  variantsInColor: readonly VariantLike[],
+  rate: number | null,
+  opts: { slug: string; colorSlug: string },
+): ResolvedSize {
+  const exact = variantsInColor.find((v) => v.sizeLabel === option.label);
+  if (exact) {
+    return {
+      option,
+      variant: exact,
+      priceable: true,
+      availability: exact.stock > 0 ? 'stock' : 'made-to-order',
+    };
+  }
+  if (rate === null) return { option, priceable: false, availability: 'quote' };
+  const priceInr = Math.round(rate * option.ft[0] * option.ft[1]);
+  if (!Number.isFinite(priceInr) || priceInr <= 0) return { option, priceable: false, availability: 'quote' };
+  // Made-to-order synthesis: same numeric feet model the cart already accepts.
+  const synth: VariantLike = {
+    id: mtoVariantId(opts.slug, option.key, opts.colorSlug),
+    sku: `MTO-${option.key.replace('x', '')}-${opts.colorSlug.slice(0, 2).toUpperCase()}`,
+    sizeLabel: option.label,
+    width: { cm: Math.round(option.ft[0] * CM_PER_FT), in: Math.round(option.ft[0] * 12) },
+    length: { cm: Math.round(option.ft[1] * CM_PER_FT), in: Math.round(option.ft[1] * 12) },
+    colorSlug: opts.colorSlug,
+    priceInr,
+    stock: 0,
+  };
+  return { option, variant: synth, priceable: true, availability: 'made-to-order' };
+}
+
+/** Resolve all five standard sizes for a product (used by PDP & cart). */
+export function resolveAllStandardSizes(
+  standardOptions: readonly SizeOption[],
+  variantsInColor: readonly VariantLike[],
+  rate: number | null,
+  opts: { slug: string; colorSlug: string },
+): ResolvedSize[] {
+  return standardOptions.map((option) => resolveStandardSize(option, variantsInColor, rate, opts));
 }
 
 /** Per-side recommendation guidance for the floor-plan (room) selector. */
