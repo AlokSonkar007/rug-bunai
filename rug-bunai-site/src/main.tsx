@@ -9,7 +9,7 @@ import { ArticlePage, JournalPage } from './pages/JournalPage';
 import StoryPage from './pages/StoryPage';
 import ContactPage, { NotFound } from './pages/InfoPages';
 import PolicyPage from './pages/PolicyPages';
-import { CartPage, CheckoutPage } from './pages/CartPages';
+import { CartPage, CheckoutPage, OrderDetailPage, OrdersPage } from './pages/CartPages';
 import { LoginPage } from './pages/AuthPages';
 import WishlistPage from './pages/WishlistPage';
 import AdminPage from './pages/AdminPage';
@@ -37,6 +37,8 @@ const router = createBrowserRouter([
       { path: 'story', element: <StoryPage /> },
       { path: 'cart', element: <CartPage /> },
       { path: 'checkout', element: <CheckoutPage /> },
+      { path: 'orders', element: <OrdersPage /> },
+      { path: 'orders/:id', element: <OrderDetailPage /> },
       { path: 'wishlist', element: <WishlistPage /> },
       { path: 'login', element: <LoginPage /> },
       { path: 'admin/login', element: <LoginPage adminOnly /> },

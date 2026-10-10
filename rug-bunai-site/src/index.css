@@ -1234,3 +1234,42 @@ html, body { max-width: 100%; overflow-x: clip; }
   .room-size-recs { padding: 14px; }
   .size-rec { font-size: 0.72rem; padding: 8px 13px; }
 }
+
+/* ── Order history & admin orders (persistent orders feature) ───────────── */
+.orders-list { display: flex; flex-direction: column; gap: 12px; }
+.order-row {
+  display: flex; justify-content: space-between; align-items: center; gap: 16px;
+  padding: 18px 20px; border: 1px solid var(--line, #e5ddd0); border-radius: 10px;
+  background: var(--card, #fffdf8); color: inherit; text-decoration: none; flex-wrap: wrap;
+}
+.order-row:hover { border-color: currentColor; }
+.order-row-mid { display: flex; flex-direction: column; gap: 4px; }
+.order-status {
+  display: inline-block; font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line, #e5ddd0); width: fit-content;
+}
+.order-status-placed { background: #f4efe6; }
+.order-status-in_production { background: #eee9dc; }
+.order-status-shipped { background: #e6ecdf; }
+.order-status-delivered { background: #dfe9de; }
+.order-status-cancelled { background: #f1dede; }
+.orders-detail-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: clamp(24px, 4vw, 48px); align-items: start; }
+.order-item {
+  display: flex; justify-content: space-between; gap: 16px; padding: 16px 0;
+  border-bottom: 1px solid var(--line, #e5ddd0);
+}
+.admin-orders-list { display: flex; flex-direction: column; gap: 10px; }
+.admin-order-row {
+  display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 12px 14px; border: 1px solid var(--line, #e5ddd0); border-radius: 10px;
+}
+.admin-order-main {
+  display: flex; gap: 16px; align-items: center; flex-wrap: wrap; flex: 1; min-width: 0;
+  background: none; border: 0; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.admin-order-status select { margin-left: 6px; }
+.btn-linklike { background: none; border: 0; color: inherit; text-decoration: underline; cursor: pointer; font: inherit; padding: 0; }
+@media (max-width: 700px) {
+  .orders-detail-grid { grid-template-columns: 1fr; }
+  .order-row { gap: 10px; }
+}

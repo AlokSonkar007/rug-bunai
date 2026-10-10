@@ -228,7 +228,8 @@ export default function Layout() {
             <span className="account-links">
               {user ? (
                 <>
-                  <Link to="/wishlist" className="clear-all" style={{ fontSize: '0.72rem' }}>Wishlist</Link>
+                  <Link to="/wishlist" className="clear-all" style={{ fontSize: "0.72rem" }}>Wishlist</Link>
+                  <Link to="/orders" className="clear-all" style={{ fontSize: "0.72rem" }}>Orders</Link>
                   {profile?.role === 'admin' && <Link to="/admin" className="clear-all" style={{ fontSize: '0.72rem' }}>Studio</Link>}
                   <button className="clear-all" style={{ fontSize: '0.72rem' }} onClick={() => void signOut()}>Sign out</button>
                 </>
@@ -286,6 +287,7 @@ export default function Layout() {
               {user ? (
                 <>
                   <Link to="/wishlist">Wishlist</Link>
+                  <Link to="/orders">Orders</Link>
                   {profile?.role === 'admin' && <Link to="/admin">Studio</Link>}
                   <button className="clear-all" onClick={() => void signOut()}>Sign out</button>
                 </>
