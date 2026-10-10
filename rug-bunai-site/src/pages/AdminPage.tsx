@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react
 import { Link } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import {
-  ORDER_STATUSES, fetchAllOrders, fetchMyOrderForAdmin, formatPaise, setOrderStatus,
-  markCodCollected, fetchOrderNotifications, type NotificationJobRow,
-  type OrderDetailRow, type OrderItemRow, type OrderStatus,
+  ORDER_STATUSES, fetchAllOrders, fetchMyOrderForAdmin, fetchOrderNotifications, formatPaise,
+  markCodCollected, retryNotification, setOrderStatus, syncTrustedPrices,
+  type NotificationJobRow, type OrderDetailRow, type OrderItemRow, type OrderStatus,
 } from '../lib/orders';
 import { useCatalog, type CatalogProduct } from '../lib/catalog';
 import { CARPET_CATEGORIES, COLORS, MATERIALS, TECHNIQUES } from '../data/vocabularies';
@@ -1204,19 +1204,24 @@ export default function AdminPage() {
 }
 
 
-// ── Admin order management (Phase 6) ───────────────────────────────────────
-// Reads are RLS-restricted to verified admins; status changes go through the
-// guarded update_order_status() function. Payment status is display-only —
-// nothing here can mark an order paid until a real payment exists.
+// ── Admin order management (Phase 4) ───────────────────────────────────────
+// Reads are RLS-restricted to verified admins. Fulfilment status changes go
+// through the guarded update_order_status() RPC; COD payment can be marked
+// received ONLY via mark_order_paid() (server enforces delivered + cod + admin).
+// Notification jobs (email/WhatsApp per recipient) are shown with their real
+// delivery status and failed/skipped jobs can be retried without touching the
+// order — no duplicate orders, no false "sent" claims.
 
 function AdminOrdersPanel() {
+  const catalog = useCatalog();
   const [orders, setOrders] = useState<(OrderDetailRow & { customer_id: string })[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [detail, setDetail] = useState<{ order: OrderDetailRow; items: OrderItemRow[] } | null>(null);
+  const [notifs, setNotifs] = useState<Record<string, NotificationJobRow[]>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
-  const [notifs, setNotifs] = useState<Record<string, NotificationJobRow[]>>({});
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
 
   const load = useCallback(() => {
     fetchAllOrders()
@@ -1232,19 +1237,28 @@ function AdminOrdersPanel() {
   useEffect(() => {
     if (!openId) { setDetail(null); return; }
     let cancelled = false;
-    fetchMyOrderForAdmin(openId)
-      .then((res) => { if (!cancelled) setDetail(res); })
-      .catch(() => { if (!cancelled) setDetail(null); });
+    Promise.all([fetchMyOrderForAdmin(openId), fetchOrderNotifications([openId])])
+      .then(([res, grouped]) => {
+        if (!cancelled) {
+          setDetail(res);
+          setNotifs((prev) => ({ ...prev, [openId]: grouped[openId] ?? [] }));
+        }
+      })
+      .catch(() => { if (!cancelled) { setDetail(null); setNotifs((prev) => ({ ...prev, [openId]: [] })); } });
     return () => { cancelled = true; };
   }, [openId]);
 
-  const changeStatus = async (orderId: string, status: OrderStatus) => {
+  const runAction = async (orderId: string, fn: () => Promise<void>, ok: string) => {
     setBusyId(orderId);
     setStatusMsg(null);
     try {
-      await setOrderStatus(orderId, status);
-      setStatusMsg(`Order #${orderId.slice(0, 8)} → ${status.replace('_', ' ')}.`);
+      await fn();
+      setStatusMsg(ok);
       load();
+      // Refresh the open detail + notification log quietly.
+      const [res, grouped] = await Promise.all([fetchMyOrderForAdmin(orderId), fetchOrderNotifications([orderId])]);
+      setDetail(res);
+      setNotifs((prev) => ({ ...prev, [orderId]: grouped[orderId] ?? [] }));
     } catch (err) {
       setStatusMsg(err instanceof Error ? err.message : 'Could not update the order.');
     } finally {
@@ -1252,42 +1266,58 @@ function AdminOrdersPanel() {
     }
   };
 
-  const collectCod = async (orderId: string) => {
-    if (!window.confirm('Confirm that the cash for this order has physically been received before marking it paid.')) return;
-    setBusyId(orderId);
-    setStatusMsg(null);
+  const changeStatus = (orderId: string, status: OrderStatus) =>
+    runAction(orderId, () => setOrderStatus(orderId, status),
+      `Order marked ${status.replace('_', ' ')}.`);
+
+  const collectCash = (o: OrderDetailRow) =>
+    runAction(o.id, () => markCodCollected(o.id),
+      `Cash collected for ${o.order_reference ?? o.id.slice(0, 8)} — payment recorded as paid.`);
+
+  const retryJob = (job: NotificationJobRow) =>
+    runAction(job.order_id, () => retryNotification(job.id),
+      `${job.channel} notification (${job.recipient_kind}) requeued — the worker will resend it shortly.`);
+
+  const syncPrices = async () => {
+    setSyncMsg(null);
     try {
-      await markCodCollected(orderId);
-      setStatusMsg(`Cash collected for order #${orderId.slice(0, 8).toUpperCase()}.`);
-      load();
+      const n = await syncTrustedPrices(catalog.products);
+      setSyncMsg(`Trusted price book synced — ${n} variant${n === 1 ? '' : 's'} updated.`);
     } catch (err) {
-      setStatusMsg(err instanceof Error ? err.message : 'Could not record the collection.');
-    } finally {
-      setBusyId(null);
+      setSyncMsg(err instanceof Error ? err.message : 'Price-book sync failed.');
     }
   };
 
-  if (error) return <p className="field-error" role="alert">{error} — has supabase/migrations/0005_orders.sql been applied?</p>;
+  if (error) return <p className="field-error" role="alert">{error} — have supabase/migrations/0005_orders.sql and 0007_cod_orders_trusted_pricing.sql been applied?</p>;
   if (orders === null) return <p className="muted">Loading orders…</p>;
-  if (orders.length === 0) return <p className="muted">No orders yet. They will appear here as soon as customers check out.</p>;
 
   return (
     <div>
-      <h2 className="subhead" style={{ marginBottom: 16 }}>Customer orders</h2>
+      <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
+        <h2 className="subhead">Customer orders</h2>
+        <button className="btn btn-ghost" onClick={syncPrices} type="button">
+          Sync trusted price book
+        </button>
+      </div>
+      {syncMsg && <p className="muted" role="status" style={{ marginBottom: 12 }}>{syncMsg}</p>}
+      {!catalog.loading && catalog.products.length === 0 && (
+        <p className="muted" style={{ marginBottom: 12 }}>Catalogue not loaded — sync the price book once it is.</p>
+      )}
+      {orders.length === 0 && <p className="muted">No orders yet. They will appear here as soon as customers check out.</p>}
       <div className="admin-orders-list">
         {orders.map((o) => (
           <div key={o.id} className="admin-order-row">
             <button className="admin-order-main" onClick={() => setOpenId(openId === o.id ? null : o.id)}>
-              <span>#{o.id.slice(0, 8).toUpperCase()}</span>
+              <span>{o.order_reference ?? `#${o.id.slice(0, 8).toUpperCase()}`}</span>
               <span>{new Date(o.created_at).toLocaleString('en-IN')}</span>
               <span>{o.full_name} · {o.city}</span>
               <span className={`order-status order-status-${o.status}`}>{o.status.replace('_', ' ')}</span>
               <span className={`order-status order-status-pay-${o.payment_status}`}>payment: {o.payment_status}</span>
               <strong>{formatPaise(o.total_paise)}</strong>
             </button>
-            {o.payment_status === 'pending' && (
-              <button className="studio-button ghost" disabled={busyId === o.id} onClick={() => collectCod(o.id)}>
-                Mark COD collected
+            {o.payment_status === 'pending' && o.payment_method === 'cod' && (
+              <button className="studio-button ghost" disabled={busyId === o.id || o.status !== 'delivered'} onClick={() => collectCash(o)}>
+                Mark cash collected
               </button>
             )}
             <label className="admin-order-status">
@@ -1306,35 +1336,66 @@ function AdminOrdersPanel() {
       {statusMsg && <p className="muted" role="status" style={{ marginTop: 12 }}>{statusMsg}</p>}
       {openId && detail && (
         <div className="admin-order-detail" style={{ marginTop: 20 }}>
-          <h3 className="subhead">Order #{openId.slice(0, 8).toUpperCase()} — payment: {detail.order.payment_status}</h3>
+          <h3 className="subhead">
+            {detail.order.order_reference ?? `Order #${openId.slice(0, 8).toUpperCase()}`}
+            {' '}— {detail.order.payment_method.toUpperCase()} payment: {detail.order.payment_status}
+          </h3>
           {detail.items.map((it) => (
             <p key={it.id} className="card-meta" style={{ margin: '8px 0' }}>
               {it.product_name} · {it.size_label} · qty {it.quantity}
+              {it.colour_name ? ` · ${it.colour_name}` : ''}
               {it.coating ? ` · coating +${formatPaise(it.coating_charge_paise * it.quantity)}` : ''}
               {' '}— {formatPaise(it.line_total_paise)}
               {it.note ? ` (${it.note})` : ''}
             </p>
           ))}
-          <p className="muted" style={{ fontSize: '0.8rem', marginTop: 10 }}>
-            Deliver to {detail.order.full_name}, {detail.order.address}, {detail.order.city} — {detail.order.pin} · {detail.order.email}
+          <p className="muted" style={{ fontSize: '0.85rem', marginTop: 6 }}>
+            Items {formatPaise(detail.order.items_subtotal_paise)}
+            {' '}+ coating {formatPaise(detail.order.coating_subtotal_paise)}
+            {' '}= <strong>{formatPaise(detail.order.total_paise)}</strong>
           </p>
-          {(notifs[openId]?.length ?? 0) > 0 && (
-            <div style={{ marginTop: 12 }}>
-              <h4 className="subhead" style={{ fontSize: '0.85rem' }}>Notifications</h4>
-              {notifs[openId].map((n) => (
-                <p key={n.id} className="card-meta" style={{ margin: '4px 0', fontSize: '0.78rem' }}>
-                  <span className={`order-status order-status-notif-${n.status}`}>{n.status}</span>{' '}
-                  {n.recipient_kind} · {n.channel} → {n.destination || '(no destination)'}
-                  {n.attempts > 0 ? ` · ${n.attempts} attempt(s)` : ''}
-                  {n.last_error ? ` · ${n.last_error}` : ''}
-                </p>
-              ))}
-              {notifs[openId].some((n) => n.status === 'failed') && (
-                <p className="muted" style={{ fontSize: '0.72rem', marginTop: 6 }}>
-                  Failed jobs are retried automatically by the notification worker with exponential backoff.
-                </p>
+          <p className="muted" style={{ fontSize: '0.8rem', marginTop: 10 }}>
+            Deliver to {detail.order.full_name}, {detail.order.address}, {detail.order.city} — {detail.order.pin}
+            <br />
+            Contact: {detail.order.email}{detail.order.phone ? ` · ${detail.order.phone}` : ''}
+            {detail.order.whatsapp_consent ? ' · WhatsApp updates consented' : ' · No WhatsApp consent'}
+          </p>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 12, flexWrap: 'wrap' }}>
+            {detail.order.payment_method === 'cod' && detail.order.payment_status === 'pending' && (
+              <button
+                type="button"
+                className="btn btn-solid"
+                disabled={busyId === openId || detail.order.status !== 'delivered'}
+                title={detail.order.status !== 'delivered' ? 'Mark the order delivered first — cash is collected on delivery.' : 'Confirm the courier collected the cash.'}
+                onClick={() => collectCash(detail.order)}
+              >
+                Mark cash collected
+              </button>
+            )}
+            {detail.order.payment_status === 'paid' && (
+              <span className="muted" style={{ fontSize: '0.8rem' }}>Payment received ✓</span>
+            )}
+          </div>
+          <h4 className="subhead" style={{ marginTop: 18, fontSize: '1rem' }}>Notifications</h4>
+          {(notifs[openId]?.length ?? 0) === 0 && <p className="muted" style={{ fontSize: '0.8rem' }}>No notification jobs recorded for this order.</p>}
+          {(notifs[openId] ?? []).map((j) => (
+            <p key={j.id} className="card-meta" style={{ margin: '6px 0', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <span>{j.channel} → {j.recipient_kind}{j.destination ? ` (${j.destination})` : ''}</span>
+              <span className={`order-status order-status-notif-${j.status}`}>
+                {j.status}{j.attempts > 0 ? ` · ${j.attempts} attempt${j.attempts === 1 ? '' : 's'}` : ''}
+              </span>
+              {j.last_error && <span className="field-error" style={{ fontSize: '0.75rem' }}>{j.last_error}</span>}
+              {(j.status === 'failed' || j.status === 'skipped') && (
+                <button type="button" className="clear-all" disabled={busyId === j.order_id} onClick={() => retryJob(j)}>
+                  Retry
+                </button>
               )}
-            </div>
+            </p>
+          ))}
+          {(notifs[openId] ?? []).some((j) => j.status === 'failed') && (
+            <p className="muted" style={{ fontSize: '0.72rem', marginTop: 6 }}>
+              Failed jobs are retried automatically by the notification worker with exponential backoff.
+            </p>
           )}
         </div>
       )}

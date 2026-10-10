@@ -5,6 +5,8 @@ import { useCart } from '../lib/cart';
 import { STAIN_COAT_RATE_INR_PER_SQFT } from '../lib/sizes';
 import { productImage } from '../lib/images';
 import { useAuth } from '../lib/auth';
+import { useCatalog } from '../lib/catalog';
+import { normalizePhoneForWhatsapp } from '../lib/orders';
 import {
   fetchMyOrder, fetchMyOrders, formatPaise, newIdempotencyKey, placeOrder,
   type OrderDetailRow, type OrderItemRow, type OrderSummaryRow,
@@ -96,18 +98,22 @@ export function CartPage() {
 
 // ── Frictionless three-step checkout (Apple-style: minimal steps, retained info) ──
 
-type Errors = Partial<Record<'email' | 'name' | 'address' | 'city' | 'pin', string>>;
+type Errors = Partial<Record<'email' | 'name' | 'phone' | 'address' | 'city' | 'pin', string>>;
 
 export function CheckoutPage() {
   const cart = useCart();
   const { user, profile } = useAuth();
-  const [placed, setPlaced] = useState<{ orderId: string; totalInr: number; email: string } | null>(null);
+  const catalog = useCatalog();
+  const [placed, setPlaced] = useState<{ orderReference: string; orderId: string; totalInr: number; email: string; items: { name: string; size: string; qty: number }[] } | null>(null);
   const [errors, setErrors] = useState<Errors>({});
   const [form, setForm] = useState({
     email: user?.email ?? profile?.email ?? '',
     name: profile?.display_name ?? '',
+    phone: '',
     address: '', city: '', pin: '',
   });
+  /** Explicit opt-in for WhatsApp order updates (Meta requires consent). */
+  const [waConsent, setWaConsent] = useState(false);
   /** One key per checkout attempt — reused across retries so a network
    *  retry returns the original order instead of creating a duplicate. */
   const [attemptKey, setAttemptKey] = useState<string>(() => newIdempotencyKey());
@@ -128,6 +134,7 @@ export function CheckoutPage() {
     if (form.address.trim().length < 8) errs.address = 'Street address required.';
     if (form.city.trim().length < 2) errs.city = 'City required.';
     if (!/^\d{6}$/.test(form.pin)) errs.pin = 'PIN code must be 6 digits.';
+    if (!normalizePhoneForWhatsapp(form.phone)) errs.phone = 'Enter a valid mobile number (10 digits, or with country code).';
     setErrors(errs);
     if (Object.keys(errs).length > 0) return;
     if (!user) {
@@ -146,13 +153,22 @@ export function CheckoutPage() {
       const result = await placeOrder({
         email: form.email,
         fullName: form.name,
+        phone: form.phone,
+        whatsappConsent: waConsent,
         address: form.address,
         city: form.city,
         pin: form.pin,
         lines: cart.items,
+        products: catalog.products,
         idempotencyKey: attemptKey,
       });
-      setPlaced({ orderId: result.orderId, totalInr, email: form.email });
+      setPlaced({
+        orderId: result.orderId,
+        orderReference: result.orderReference,
+        totalInr,
+        email: form.email,
+        items: cart.items.map((l) => ({ name: l.product.name, size: l.variant.sizeLabel, qty: l.qty })),
+      });
       cart.clear();
       window.scrollTo(0, 0);
     } catch (err) {
@@ -166,16 +182,28 @@ export function CheckoutPage() {
   };
 
   if (placed) {
+    // COD success screen: reference, item summary, total and COD status —
+    // exactly what the queued email/WhatsApp confirmations contain.
     return (
       <div className="wrap empty-state">
-        <p className="eyebrow">Order {placed.orderId}</p>
+        <p className="eyebrow">Order {placed.orderReference}</p>
         <h1 className="headline" style={{ margin: '12px 0' }}>The loom has your instruction.</h1>
+        <ul style={{ listStyle: 'none', padding: 0, margin: '18px auto', maxWidth: '34ch', textAlign: 'left' }}>
+          {placed.items.map((it, i) => (
+            <li key={i} className="card-meta" style={{ marginBottom: 6 }}>
+              {it.name} · {it.size} · qty {it.qty}
+            </li>
+          ))}
+        </ul>
         <p className="muted" style={{ maxWidth: '46ch', margin: '0 auto' }}>
-          Order saved — {formatINR(placed.totalInr)} including any coating charges. A confirmation
-          is on its way to {placed.email}. Your pieces will be washed, sunned and photographed
+          Total <strong>{formatINR(placed.totalInr)}</strong> — <strong>Cash on Delivery</strong>,
+          payable when your rug arrives. A confirmation is on its way to {placed.email}
+          {waConsent ? ' and WhatsApp' : ''}. Your pieces will be washed, sunned and photographed
           before dispatch — expect provenance cards with every knot count.
         </p>
         <p className="muted" style={{ fontSize: '0.75rem', marginTop: 12 }}>
+          Payment status: pending (COD). No online payment is taken now and no card details are
+          stored by this website. Keep your order reference {placed.orderReference} handy.
           Payment method: Cash on Delivery — pay in cash when your rug arrives.
           Payment status: pending until delivery is confirmed. No card details are stored by this website.
         </p>
@@ -233,6 +261,21 @@ export function CheckoutPage() {
               {errors.pin && <p className="field-error">{errors.pin}</p>}
             </div>
           </div>
+          <div className="field">
+            <label htmlFor="ck-phone">Mobile number</label>
+            <input id="ck-phone" type="tel" inputMode="tel" value={form.phone} onChange={set('phone')} autoComplete="tel" placeholder="9876543210 or +91 98765 43210" />
+            {errors.phone && <p className="field-error">{errors.phone}</p>}
+          </div>
+          <hr className="rule" style={{ margin: '26px 0' }} />
+          <h2 className="subhead" style={{ marginBottom: 18 }}>Payment — Cash on Delivery</h2>
+          <p className="muted" style={{ fontSize: '0.85rem', marginBottom: 14 }}>
+            Pay in cash when your rug is delivered. We do not take online payments and never store
+            card details; the order is recorded as <strong>payment pending</strong>.
+          </p>
+          <label className="coating-toggle" style={{ marginBottom: 20 }}>
+            <input type="checkbox" checked={waConsent} onChange={(e) => setWaConsent(e.target.checked)} />
+            <span>Send my order updates on WhatsApp at this number (optional — confirmations always go by email).</span>
+          </label>
           <hr className="rule" style={{ margin: '26px 0' }} />
           <h2 className="subhead" style={{ marginBottom: 18 }}>Payment</h2>
           <div className="cod-panel" role="group" aria-label="Payment method">
@@ -250,6 +293,7 @@ export function CheckoutPage() {
             </div>
           )}
           <button className="btn btn-solid btn-block" type="submit" disabled={submitting}>
+            {submitting ? 'Saving your order…' : `Place COD order — ${formatINR(cart.subtotalInr)}`}
             {submitting ? 'Saving your order…' : `Place order — ${formatINR(cart.subtotalInr)} (Cash on Delivery)`}
           </button>
           {!user && (
@@ -343,7 +387,7 @@ export function OrdersPage() {
         {orders.map((o) => (
           <Link key={o.id} to={`/orders/${o.id}`} className="order-row">
             <div>
-              <p className="subhead" style={{ fontSize: '1rem' }}>#{o.id.slice(0, 8).toUpperCase()}</p>
+              <p className="subhead" style={{ fontSize: '1rem' }}>{o.order_reference ?? `#${o.id.slice(0, 8).toUpperCase()}`}</p>
               <p className="card-meta">{new Date(o.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
             </div>
             <div className="order-row-mid">
@@ -395,12 +439,13 @@ export function OrderDetailPage() {
   const { order, items } = state;
   return (
     <div className="wrap section">
-      <p className="eyebrow">Order #{order.id.slice(0, 8).toUpperCase()}</p>
+      <p className="eyebrow">Order {order.order_reference ?? `#${order.id.slice(0, 8).toUpperCase()}`}</p>
       <h1 className="display" style={{ marginBlock: '10px 8px' }}>Commission details</h1>
       <p className="muted" style={{ marginBottom: 30 }}>
         Placed {new Date(order.created_at).toLocaleString('en-IN')} · Status:{' '}
         <span className={`order-status order-status-${order.status}`}>{STATUS_LABELS[order.status] ?? order.status}</span>{' '}
         · Payment: {STATUS_LABELS[order.payment_status] ?? order.payment_status}
+        {(order.payment_method ?? 'cod') === 'cod' ? ' (Cash on Delivery — pay when your rug arrives)' : ''}
       </p>
       <div className="orders-detail-grid">
         <div>
@@ -432,9 +477,13 @@ export function OrderDetailPage() {
           )}
           <div className="summary-row"><span>Shipping</span><span>Included</span></div>
           <div className="summary-row summary-total"><span>Total</span><span>{formatPaise(order.total_paise)}</span></div>
+          <p className="muted" style={{ fontSize: '0.78rem', marginTop: 10 }}>
+            Cash on Delivery · payment {STATUS_LABELS[order.payment_status] ?? order.payment_status}
+          </p>
           <h3 className="subhead" style={{ margin: '20px 0 8px', fontSize: '1rem' }}>Delivery to</h3>
           <p className="muted" style={{ fontSize: '0.85rem', lineHeight: 1.6 }}>
             {order.full_name}<br />{order.address}<br />{order.city} — {order.pin}<br />{order.email}
+            {order.phone ? <><br />{order.phone}</> : null}
           </p>
         </aside>
       </div>

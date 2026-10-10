@@ -39,23 +39,28 @@ describe('per-sq-ft pricing', () => {
 });
 
 describe('buildOrderItems tamper guards', () => {
+  const product = { name: 'Test Rug', slug: 'test-rug', colorSlugs: ['ivory'], techniqueSlug: 'hand-knotted', styleSlugs: ['minimal'], variants: [{ id: 'v1', priceInr: 96000 }] } as never;
+  const products = [product] as never[];
   const base = {
     // Minimal complete Product so the image-snapshot helper works.
-    product: { name: 'Test Rug', slug: 'test-rug', colorSlugs: ['ivory'], techniqueSlug: 'hand-knotted', styleSlugs: ['minimal'] } as never,
-    variant: { id: 'v1' } as never,
+    product,
+    variant: { id: 'v1', priceInr: 96000 } as never,
     widthFt: 5, lengthFt: 8, qty: 1, custom: null,
     coating: false, coatPerUnitInr: 0,
   };
   it('rejects a line whose total was edited client-side', () => {
-    expect(() => buildOrderItems([{ ...base, sqft: 40, unitPriceInr: 96000, lineTotalInr: 1 } as never])).toThrow();
+    expect(() => buildOrderItems([{ ...base, sqft: 40, unitPriceInr: 96000, lineTotalInr: 1 } as never], products)).toThrow();
   });
   it('rejects a stale coating charge', () => {
-    expect(() => buildOrderItems([{ ...base, sqft: 40, coating: true, coatPerUnitInr: 10, unitPriceInr: 96000, lineTotalInr: 96010 } as never])).toThrow(/coating/);
+    expect(() => buildOrderItems([{ ...base, sqft: 40, coating: true, coatPerUnitInr: 10, unitPriceInr: 96000, lineTotalInr: 96010 } as never], products)).toThrow(/coating/);
   });
   it('accepts an honest line and snapshots trusted values', () => {
     // Coating for 5×8 ft is ₹90 × 40 = ₹3,600; the line total must include it.
-    const items = buildOrderItems([{ ...base, sqft: 40, coating: true, coatPerUnitInr: 3600, unitPriceInr: 96000, lineTotalInr: (96000 + 3600) * 1 } as never]);
-    expect(items[0].unit_price_paise).toBe(9_600_000);
-    expect(items[0].coating_charge_paise).toBe(360_000);
+    // The trusted payload carries NO money — prices exist only server-side.
+    const items = buildOrderItems([{ ...base, sqft: 40, coating: true, coatPerUnitInr: 3600, unitPriceInr: 96000, lineTotalInr: (96000 + 3600) * 1 } as never], products);
+    expect(items[0].quantity).toBe(1);
+    expect(items[0].coating).toBe(true);
+    expect(items[0]).not.toHaveProperty('unit_price_paise');
+    expect(items[0]).not.toHaveProperty('coating_charge_paise');
   });
 });
