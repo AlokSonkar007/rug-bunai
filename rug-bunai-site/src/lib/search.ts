@@ -8,7 +8,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { PRODUCTS, priceRange, type Product, type Variant } from '../data/products';
-import { COLORS, MATERIALS, ROOMS, STYLES, TECHNIQUES } from '../data/vocabularies';
+import { CARPET_CATEGORIES, carpetCategoryPath, COLORS, findCarpetCategory, MATERIALS, ROOMS, STYLES, TECHNIQUES } from '../data/vocabularies';
 
 export type SortKey = 'relevance' | 'price-asc' | 'price-desc' | 'rating' | 'best-selling' | 'newest';
 
@@ -250,6 +250,8 @@ export function productsInCategory(path: string): Product[] {
   return PRODUCTS.filter((p) => p.categoryPaths.includes(path));
 }
 
+// ── Category-path titles for every dual-axis taxonomy node (curated + derived).
+
 export const CATEGORY_TITLES: Record<string, string> = {
   'rugs/hand-knotted/wool': 'Hand-Knotted Wool Rugs',
   'rugs/hand-knotted/silk-blend': 'Hand-Knotted Silk Blend Rugs',
@@ -267,4 +269,36 @@ export const CATEGORY_TITLES: Record<string, string> = {
   'rugs/traditional': 'Traditional Rugs',
   'rugs/modern': 'Modern Rugs',
   'rugs/botanical': 'Botanical Rugs',
+  'rugs/kids-room': 'Kids Room Rugs',
 };
+
+// ── Category-path titles for every dual-axis taxonomy node (curated + derived).
+// Covers the 15 curated design categories (`rugs/category/<slug>`), room,
+// style and technique×material paths — so collection pages never lose a title.
+
+
+export function categoryTitle(path: string): string | undefined {
+  if (CATEGORY_TITLES[path]) return CATEGORY_TITLES[path];
+  const parts = path.split('/');
+  if (parts[0] === 'rugs' && parts[1] === 'category') {
+    return findCarpetCategory(parts.slice(2).join('-'))?.label;
+  }
+  if (parts[0] === 'rugs' && parts.length === 3) {
+    const tech = findTerm(TECHNIQUES, parts[1]);
+    const mat = findTerm(MATERIALS, parts[2]);
+    if (tech && mat) return `${tech.label} ${mat.label} Rugs`;
+  }
+  if (parts[0] === 'rugs' && parts.length === 2) {
+    const term = findTerm(ROOMS, parts[1]) ?? findTerm(STYLES, parts[1]) ?? findTerm(MATERIALS, parts[1]);
+    if (term) return `${term.label} Rugs`;
+  }
+  return undefined;
+}
+
+/** All category paths present in the catalogue, incl. every curated category. */
+export function allCategoryPaths(products: readonly Product[] = PRODUCTS): string[] {
+  const seen = new Set<string>();
+  products.forEach((p) => p.categoryPaths.forEach((path) => seen.add(path)));
+  CARPET_CATEGORIES.forEach((c) => seen.add(carpetCategoryPath(c.slug)));
+  return [...seen].sort();
+}
