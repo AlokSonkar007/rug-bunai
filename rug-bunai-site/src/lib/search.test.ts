@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { PRODUCTS } from '../data/products';
 import { CARPET_CATEGORIES, carpetCategoryPath, COLORS, colorHex } from '../data/vocabularies';
 import {
+  allCategoryPaths,
+  categoryTitle,
   colourPalette,
   EMPTY_FACETS,
   appliedChips,
   facetsFromSearch,
   facetsToSearch,
+  productsInCategory,
   removeChip,
   runSearch,
 } from './search';
@@ -182,15 +185,33 @@ describe('curated carpet categories (Collections menu)', () => {
   });
 
   it('removing the category chip restores the broader result set', () => {
-    const stocked = CARPET_CATEGORIES.find(
-      (c) => PRODUCTS.some((p) => p.categoryPaths.includes(carpetCategoryPath(c.slug))),
-    )!;
-    const f = facetsFromSearch(new URLSearchParams(`category=${stocked.slug}`));
+    // Curated categories currently have no assigned products, so this exercises
+    // the full chip lifecycle on a real curated slug ('geometrical-carpets')
+    // combined with a stocked size facet. Removing the category chip must
+    // restore the broader (size-filtered) result set.
+    const f = facetsFromSearch(new URLSearchParams('category=geometrical-carpets&size=medium'));
+    expect(f.categorySlug).toBe('geometrical-carpets'); // validated against CARPET_CATEGORIES
     const chip = appliedChips(f).find((x) => x.group === 'categorySlug')!;
-    expect(chip.label).toBe(stocked.label);
+    expect(chip.label).toBe('Geometrical Carpets');
     const cleared = removeChip(f, chip);
     expect(cleared.categorySlug).toBeNull();
-    expect(runSearch(cleared).total).toBeGreaterThan(runSearch(f).total);
+    expect(cleared.sizeBucket).toBe('medium'); // other facets preserved when clearing
+    expect(runSearch(f).total).toBe(0);        // honest empty state for unstocked category
+    expect(runSearch(cleared).total).toBeGreaterThan(0);
+  });
+
+  it('curated categories with no stock still clear correctly and restore the full catalogue', () => {
+    const emptyCat = CARPET_CATEGORIES.find(
+      (c) => !PRODUCTS.some((p) => p.categoryPaths.includes(carpetCategoryPath(c.slug))),
+    )!;
+    const f = facetsFromSearch(new URLSearchParams(`category=${emptyCat.slug}`));
+    expect(f.categorySlug).toBe(emptyCat.slug);
+    expect(runSearch(f).total).toBe(0);
+    const chip = appliedChips(f).find((x) => x.group === 'categorySlug')!;
+    expect(chip.label).toBe(emptyCat.label);
+    const cleared = removeChip(f, chip);
+    expect(cleared.categorySlug).toBeNull();
+    expect(runSearch(cleared).total).toBeGreaterThan(0);
   });
 
   it('unknown category slugs never crash and yield an honest empty state', () => {

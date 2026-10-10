@@ -1,11 +1,10 @@
 import { useMemo, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { carpetCategoryPath, colorHex, findCarpetCategory, findTerm, MATERIALS, ROOMS, STYLES } from '../data/vocabularies';
 import {
-  appliedChips, EMPTY_FACETS, facetsFromSearch, facetsToSearch, removeChip,
+  appliedChips, categoryTitle, EMPTY_FACETS, facetsFromSearch, facetsToSearch, removeChip,
   runSearch, SORT_OPTIONS, type FacetGroup, type FacetState,
 } from '../lib/search';
-import { categoryTitle, productsInCategory } from '../lib/search';
 import { ProductCard, Reveal } from './ProductCard';
 import { useCatalog } from '../lib/catalog';
 
@@ -115,6 +114,7 @@ export function FilterPanel({
 export default function CollectionView({ categoryPath }: { categoryPath?: string }) {
   const [sp, setSp] = useSearchParams();
   const [sheetOpen, setSheetOpen] = useState(false);
+  const navigate = useNavigate();
   const { products } = useCatalog();
 
   const baseState = useMemo<FacetState>(() => facetsFromSearch(sp), [sp]);
@@ -245,8 +245,6 @@ export default function CollectionView({ categoryPath }: { categoryPath?: string
     </div>
   );
 }
-
-export { productsInCategory };
 
 /**
  * Route wrapper for /collections/:categorySlug — turns the URL param into the
