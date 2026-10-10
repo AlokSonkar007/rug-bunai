@@ -6,9 +6,10 @@ import {
   type OrderDetailRow, type OrderItemRow, type OrderStatus,
 } from '../lib/orders';
 import { useCatalog, type CatalogProduct } from '../lib/catalog';
-import { CARPET_CATEGORIES, COLORS } from '../data/vocabularies';
+import { CARPET_CATEGORIES, COLORS, MATERIALS, TECHNIQUES } from '../data/vocabularies';
 import { getProduct, type Product } from '../data/products';
 import { rugImage } from '../lib/rugArt';
+import { productGalleryImages, removeGalleryImageAt } from '../lib/productGallery';
 import {
   dedupeColourOptions, isValidHex, normalizeHex, resolveColourOptions, validateColourOption,
   type ProductColourOption,
@@ -17,7 +18,7 @@ import {
   useSiteContent, type CollectionContent, type SiteContent, type TextOverride,
 } from '../lib/siteContent';
 
-const initialForm = { name: '', slug: '', description: '', price: '' };
+const initialForm = { name: '', slug: '', description: '', price: '', techniqueSlug: '', materialSlug: '' };
 
 /** Draft row in the admin colour editor — empty until filled & validated. */
 type ColourDraft = { label: string; hex: string };
@@ -29,6 +30,151 @@ function draftFromOption(option: ProductColourOption): ColourDraft {
 
 function slugify(value: string) {
   return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+}
+
+// ── Product gallery manager (Studio > Products) ──────────────────────────────
+// One required primary photograph + zero or more admin-managed additional
+// photos, per product. Uploads go through the existing authenticated
+// `product-images` Storage flow; the full state persists in ONE atomic write
+// (lib/catalog.tsx saveProductGallery), so a failed optional upload can never
+// corrupt or remove the saved primary image.
+
+function GalleryManager({ product, onUpload, onSave, busy, idPrefix }: {
+  product: CatalogProduct;
+  onUpload: (file: File) => Promise<string>;
+  /** Persist primary + ordered additional photos atomically. */
+  onSave: (primaryUrl: string | null, gallery: string[]) => Promise<void>;
+  busy: boolean;
+  idPrefix: string;
+}) {
+  // Working copy of the gallery view model: index 0 is the primary image.
+  const [ordered, setOrdered] = useState<string[]>(() => productGalleryImages(product));
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  // Keep the working copy in sync when the persisted product changes (refresh).
+  useEffect(() => { setOrdered(productGalleryImages(product)); setPendingFiles([]); setMsg(null); }, [product]);
+
+  const primary = ordered[0] ?? null;
+  const extras = ordered.slice(1);
+
+  const addFiles = (files: FileList | null) => {
+    if (!files?.length) return;
+    const list = Array.from(files).filter((f) => f.type.startsWith('image/'));
+    if (!list.length) { setMsg({ kind: 'err', text: 'Please choose image files.' }); return; }
+    setPendingFiles((prev) => [...prev, ...list]);
+    setMsg(null);
+  };
+
+  const makePrimaryAt = (index: number) => {
+    if (index <= 0 || index >= ordered.length) return;
+    const url = ordered[index];
+    setOrdered([url, ...ordered.filter((u) => u !== url)]);
+  };
+
+  const moveBy = (index: number, delta: number) => {
+    const to = index + delta;
+    if (to < 0 || to >= ordered.length) return;
+    const next = [...ordered];
+    const [item] = next.splice(index, 1);
+    next.splice(to, 0, item);
+    setOrdered(next);
+  };
+
+  const removeAt = (index: number) => {
+    const result = removeGalleryImageAt({ imageUrl: primary, gallery: extras }, index);
+    setOrdered(result.primary ? [result.primary, ...result.gallery] : result.gallery);
+  };
+
+  const resetToSaved = () => {
+    setOrdered(productGalleryImages(product));
+    setPendingFiles([]);
+    setMsg(null);
+  };
+
+  const dirty =
+    pendingFiles.length > 0 ||
+    JSON.stringify(ordered) !== JSON.stringify(productGalleryImages(product));
+
+  const save = async () => {
+    setSaving(true);
+    setMsg(null);
+    try {
+      // Upload every pending file FIRST; only after all succeed do we persist
+      // one combined state — partial failures leave the saved gallery intact.
+      const uploaded: string[] = [];
+      setProgress({ done: 0, total: pendingFiles.length });
+      for (let i = 0; i < pendingFiles.length; i++) {
+        const url = await onUpload(pendingFiles[i]);
+        uploaded.push(url);
+        setProgress({ done: i + 1, total: pendingFiles.length });
+      }
+      const nextPrimary = primary;
+      const nextExtras = [...extras, ...uploaded];
+      await onSave(nextPrimary, nextExtras);
+      setOrdered(nextPrimary ? [nextPrimary, ...nextExtras] : nextExtras);
+      setPendingFiles([]);
+      setMsg({ kind: 'ok', text: 'Gallery saved — visible on the product page after refresh.' });
+    } catch (reason) {
+      setMsg({ kind: 'err', text: reason instanceof Error ? reason.message : 'Could not save the gallery. Your saved images are unchanged.' });
+    } finally {
+      setProgress(null);
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="gallery-manager" style={{ marginTop: 16, borderTop: '1px solid var(--line)', paddingTop: 16 }}>
+      <h4 className="subhead" style={{ marginBottom: 6 }}>Photo gallery</h4>
+      <p className="muted" style={{ fontSize: '0.78rem', marginBottom: 12 }}>
+        The first image is the primary photo shown everywhere. Additional photos appear as real thumbnails on the product page — never duplicates.
+      </p>
+      <ul className="gallery-admin-list" style={{ display: 'flex', flexWrap: 'wrap', gap: 10, listStyle: 'none', padding: 0, margin: 0 }}>
+        {ordered.map((url, i) => (
+          <li key={`${i}:${url}`} className={`gallery-admin-item${i === 0 ? ' is-primary' : ''}`}>
+            <img src={url} alt={`${product.name} ${i === 0 ? 'primary photo' : `additional photo ${i}`}`} width={96} height={72} style={{ objectFit: 'cover', display: 'block' }} />
+            <span className="gallery-admin-badge">{i === 0 ? 'Primary' : `#${i}`}</span>
+            <div className="gallery-admin-actions">
+              {i > 0 && <button type="button" className="clear-all" disabled={busy || saving} onClick={() => makePrimaryAt(i)} title="Make this the primary photo">Make primary</button>}
+              <button type="button" className="clear-all" disabled={busy || saving || i === 0} onClick={() => moveBy(i, -1)} aria-label="Move earlier">↑</button>
+              <button type="button" className="clear-all" disabled={busy || saving || i === ordered.length - 1} onClick={() => moveBy(i, 1)} aria-label="Move later">↓</button>
+              {ordered.length > 1 && (
+                <button type="button" className="clear-all" disabled={busy || saving} onClick={() => removeAt(i)}>Remove</button>
+              )}
+            </div>
+          </li>
+        ))}
+        {!ordered.length && <li className="muted">No photo yet — a primary image is required before saving.</li>}
+      </ul>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginTop: 12 }}>
+        <label className="btn" style={{ cursor: busy || saving ? 'wait' : 'pointer' }} htmlFor={`${idPrefix}-gallery-add`}>
+          Add photos<input hidden id={`${idPrefix}-gallery-add`} type="file" accept="image/*" multiple disabled={busy || saving} onChange={(event) => addFiles(event.target.files)} />
+        </label>
+        {pendingFiles.length > 0 && (
+          <span className="muted" style={{ fontSize: '0.78rem' }}>
+            {pendingFiles.length} pending: {pendingFiles.map((f) => f.name).join(', ')}
+          </span>
+        )}
+      </div>
+      {progress && progress.total > 0 && (
+        <p className="muted" role="status" style={{ fontSize: '0.78rem', marginTop: 8 }}>
+          Uploading {progress.done}/{progress.total}…
+        </p>
+      )}
+      {dirty && (
+        <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
+          <button type="button" className="btn btn-solid" disabled={busy || saving || !primary} onClick={() => void save()}>
+            {saving ? 'Saving gallery…' : 'Save gallery'}
+          </button>
+          <button type="button" className="clear-all" disabled={saving} onClick={resetToSaved}>Discard changes</button>
+        </div>
+      )}
+      {!primary && <p className="field-error">A primary image is required — upload a photo before saving this gallery.</p>}
+      {msg && <p className={msg.kind === 'err' ? 'field-error' : 'muted'} role="status">{msg.text}</p>}
+    </div>
+  );
 }
 
 /** Quick-pick chips from the canonical vocabulary for a new colour row. */
@@ -749,7 +895,7 @@ function HomepageProductsEditor({ onUpload }: { onUpload: (file: File) => Promis
 export default function AdminPage() {
   const [tab, setTab] = useState<'products' | 'homepage' | 'collections' | 'product-content' | 'orders' | 'shared'>('products');
   const { profile, configured } = useAuth();
-  const { products, loading, uploadProductPhoto, createManagedProduct, removeProduct, changeProductPhoto, saveProductColours } = useCatalog();
+  const { products, loading, uploadProductPhoto, createManagedProduct, removeProduct, changeProductPhoto, saveProductColours, saveProductGallery } = useCatalog();
   const [form, setForm] = useState(initialForm);
   const [newPhoto, setNewPhoto] = useState<File | null>(null);
   const [newColours, setNewColours] = useState<ProductColourOption[]>([]);
@@ -759,6 +905,10 @@ export default function AdminPage() {
   const [colourEditorFor, setColourEditorFor] = useState<string | null>(null);
   const [editorColours, setEditorColours] = useState<ProductColourOption[]>([]);
   const [savingColoursFor, setSavingColoursFor] = useState<string | null>(null);
+  const [galleryEditorFor, setGalleryEditorFor] = useState<string | null>(null);
+  const [newPhotoPreview, setNewPhotoPreview] = useState<string | null>(null);
+  const [newExtraPreviews, setNewExtraPreviews] = useState<string[]>([]);
+  const [newExtraFiles, setNewExtraFiles] = useState<File[]>([]);
 
   if (!configured) {
     return <div className="wrap empty-state"><h1 className="headline">Connect Supabase first.</h1><p className="muted">Add the two values in <code>.env</code>, then run the SQL setup file.</p></div>;
@@ -775,16 +925,32 @@ export default function AdminPage() {
     try {
       const slug = form.slug || slugify(form.name);
       if (!slug) throw new Error('Please enter a product name.');
-      const imageUrl = newPhoto ? await uploadProductPhoto(newPhoto) : null;
+      // Required fields — validated before any upload/persistence so an
+      // incomplete product can never reach the catalogue.
+      if (!newPhoto) throw new Error('A primary photo is required for every new product.');
+      if (!TECHNIQUES.some((term) => term.slug === form.techniqueSlug)) throw new Error('Please select a technique for this product.');
+      if (!MATERIALS.some((term) => term.slug === form.materialSlug)) throw new Error('Please select a material for this product.');
+      // Upload the primary image FIRST; only then attempt optional additional
+      // photos — a failed extra upload must never lose the saved primary.
+      const imageUrl = await uploadProductPhoto(newPhoto);
+      const gallery: string[] = [];
+      const galleryErrors: string[] = [];
+      for (const file of newExtraFiles) {
+        try {
+          gallery.push(await uploadProductPhoto(file));
+        } catch {
+          galleryErrors.push(file.name);
+        }
+      }
       await createManagedProduct({
         name: form.name,
         slug,
         description: form.description,
         imageUrl,
-      
-        // Default product classification
-        techniqueSlug: 'hand-knotted',
-        materialSlug: 'wool',
+
+        // Admin-selected classification (canonical vocabulary slugs).
+        techniqueSlug: form.techniqueSlug,
+        materialSlug: form.materialSlug,
         roomSlugs: ['living-room'],
         styleSlugs: ['modern'],
         categorySlugs: [],
@@ -802,11 +968,18 @@ export default function AdminPage() {
         ],
         // Admin-defined colour options for this rug (validated before submit).
         colourOptions: newColours,
+        // Additional photographs (optional) — persisted with the product.
+        gallery,
       });
       setForm(initialForm);
       setNewPhoto(null);
+      setNewPhotoPreview(null);
+      setNewExtraFiles([]);
+      setNewExtraPreviews([]);
       setNewColours([]);
-      setMessage('Product added to the collection.');
+      setMessage(galleryErrors.length
+        ? `Product added, but ${galleryErrors.length} additional photo(s) failed to upload (${galleryErrors.join(', ')}). Add them again via “Manage gallery”.`
+        : 'Product added to the collection.');
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to add the product.');
     } finally {
@@ -895,7 +1068,38 @@ export default function AdminPage() {
         </div>
         <div className="field"><label htmlFor="product-slug">URL name (optional)</label><input id="product-slug" value={form.slug} onChange={(event) => setForm({ ...form, slug: slugify(event.target.value) })} placeholder="generated-from-name" /></div>
         <div className="field"><label htmlFor="product-description">Description</label><textarea id="product-description" rows={4} required value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></div>
-        <div className="field"><label htmlFor="product-photo">Photo</label><input id="product-photo" type="file" accept="image/*" onChange={(event) => setNewPhoto(event.target.files?.[0] ?? null)} /></div>
+        <div className="form-grid-2">
+          <div className="field">
+            <label htmlFor="product-technique">Technique *</label>
+            <select id="product-technique" required value={form.techniqueSlug} onChange={(event) => setForm({ ...form, techniqueSlug: event.target.value })}>
+              <option value="" disabled>Select technique</option>
+              {TECHNIQUES.map((term) => <option key={term.slug} value={term.slug}>{term.label}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="product-material">Material *</label>
+            <select id="product-material" required value={form.materialSlug} onChange={(event) => setForm({ ...form, materialSlug: event.target.value })}>
+              <option value="" disabled>Select material</option>
+              {MATERIALS.map((term) => <option key={term.slug} value={term.slug}>{term.label}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="field">
+          <label htmlFor="product-photo">Primary photo *</label>
+          <p className="muted" style={{ fontSize: '0.78rem', marginBottom: 6 }}>Required — the main image shown on cards and the product page.</p>
+          <input id="product-photo" type="file" accept="image/*" required onChange={(event) => { const f = event.target.files?.[0] ?? null; setNewPhoto(f); setNewPhotoPreview(f ? URL.createObjectURL(f) : null); }} />
+          {newPhotoPreview && <img src={newPhotoPreview} alt="Primary photo preview" width={96} height={72} style={{ objectFit: 'cover', marginTop: 8, background: '#e9e1d6' }} />}
+        </div>
+        <div className="field">
+          <label htmlFor="product-extra-photos">Additional photos (optional)</label>
+          <p className="muted" style={{ fontSize: '0.78rem', marginBottom: 6 }}>Angles, close-ups, backing… Each real photo appears once in the product-page gallery.</p>
+          <input id="product-extra-photos" type="file" accept="image/*" multiple onChange={(event) => { const files = Array.from(event.target.files ?? []); setNewExtraFiles((prev) => [...prev, ...files]); setNewExtraPreviews((prev) => [...prev, ...files.map((f) => URL.createObjectURL(f))]); }} />
+          {newExtraPreviews.length > 0 && (
+            <ul style={{ display: 'flex', gap: 8, flexWrap: 'wrap', listStyle: 'none', padding: 0, margin: '8px 0 0' }} aria-label="Additional photo previews">
+              {newExtraPreviews.map((url, i) => <li key={url}><img src={url} alt={`Additional photo ${i + 1} preview`} width={72} height={54} style={{ objectFit: 'cover', background: '#e9e1d6' }} /></li>)}
+            </ul>
+          )}
+        </div>
         <div className="field">
           <label id="new-colours-label">Available colours (optional)</label>
           <p className="muted" style={{ fontSize: '0.78rem', marginBottom: 10 }}>Define the swatches customers can choose on this rug’s page. Add as many as needed before saving.</p>
@@ -916,6 +1120,14 @@ export default function AdminPage() {
                 <div>
                   <h3 className="subhead">{product.name}</h3>
                   <p className="card-meta">/{product.slug}{product.isManaged ? ' · added product' : ''}</p>
+                  <p className="card-meta">
+                    {[
+                      TECHNIQUES.find((t2) => t2.slug === product.techniqueSlug)?.label,
+                      MATERIALS.find((m2) => m2.slug === product.materialSlug)?.label,
+                    ].filter(Boolean).join(' · ') || 'Classification not set'}
+                    {' · '}
+                    {(productGalleryImages(product).length > 1 ? `${productGalleryImages(product).length} photos` : '1 photo')}
+                  </p>
                   <div className="card-swatches" aria-label="Current colours">
                     {resolveColourOptions(product).map((c) => (
                       <span key={c.slug} className="facet-swatch" style={{ background: c.hex }} title={c.label} />
@@ -926,6 +1138,13 @@ export default function AdminPage() {
                   <label className="btn" style={{ cursor: busy ? 'wait' : 'pointer' }}>Change photo<input hidden type="file" accept="image/*" disabled={busy} onChange={(event) => void updatePhoto(product, event.target.files?.[0])} /></label>
                   <button
                     className="btn"
+                    disabled={busy}
+                    onClick={() => setGalleryEditorFor((cur) => (cur === product.slug ? null : product.slug))}
+                  >
+                    {galleryEditorFor === product.slug ? 'Close gallery' : 'Manage gallery'}
+                  </button>
+                  <button
+                    className="btn"
                     disabled={busy || savingColoursFor === product.slug}
                     onClick={() => (colourEditorFor === product.slug ? setColourEditorFor(null) : openColourEditor(product))}
                   >
@@ -934,6 +1153,15 @@ export default function AdminPage() {
                   <button className="clear-all" disabled={busy} onClick={() => void remove(product)}>Remove</button>
                 </div>
               </div>
+              {galleryEditorFor === product.slug && (
+                <GalleryManager
+                  product={product}
+                  onUpload={uploadProductPhoto}
+                  onSave={async (primaryUrl, gallery) => { await saveProductGallery(product, primaryUrl, gallery); }}
+                  busy={busy}
+                  idPrefix={'gallery-' + product.slug}
+                />
+              )}
               {colourEditorFor === product.slug && (
                 <div style={{ marginTop: 16, borderTop: '1px solid var(--line)', paddingTop: 16 }}>
                   <ColourEditor colours={editorColours} onChange={setEditorColours} idPrefix={'edit-' + product.slug} />

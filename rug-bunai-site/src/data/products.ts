@@ -108,6 +108,13 @@ export interface Product {
   readonly imageSeed: string;
   readonly thumbnailCount: number; // 5–15 macro/lifestyle angles per spec
   readonly relationships: readonly ProductRelationship[];
+  /**
+   * Admin-managed ADDITIONAL photographs for this rug (angles, close-ups,
+   * backing…). The primary image lives in `imageUrl` / the `image_url`
+   * column — never inside this list (see lib/productGallery.ts). Optional so
+   * every existing catalogue record stays valid without re-uploads.
+   */
+  readonly gallery?: readonly string[];
 }
 
 // ── Validation helpers -------------------------------------------------------
