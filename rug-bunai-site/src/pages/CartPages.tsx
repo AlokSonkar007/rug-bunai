@@ -31,7 +31,20 @@ export function CartPage() {
               <img src={productImage(l.product, 0, 220, 165)} alt={`${l.product.name} thumbnail`} loading="lazy" />
               <div>
                 <h2 className="subhead"><Link to={`/rugs/${l.product.slug}`}>{l.product.name}</Link></h2>
-                <p className="card-meta">{l.variant.sizeLabel} · colour {l.variant.colorSlug.replace(/-/g, ' ')}</p>
+                <p className="card-meta">
+                  {l.variant.sizeLabel} ·{' '}
+                  {l.custom?.colorHex ? (
+                    <>
+                      <span className="cart-custom-dot" style={{ background: l.custom.colorHex }} aria-hidden="true" />
+                      {l.custom.colorName || 'Custom colour'} — request
+                    </>
+                  ) : (
+                    <>colour {(l.custom?.colorName ?? l.variant.colorSlug).replace(/-/g, ' ')}</>
+                  )}
+                </p>
+                {l.custom?.note && (
+                  <p className="muted cart-custom-note">{l.custom.note}</p>
+                )}
                 <p className="muted" style={{ fontSize: '0.8rem', marginTop: 6 }}>{formatINR(l.variant.priceInr)} each</p>
                 <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginTop: 12 }}>
                   <span className="qty-stepper" aria-label={`Quantity of ${l.product.name}`}>

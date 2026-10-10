@@ -4,7 +4,7 @@ import { useAuth } from '../lib/auth';
 import { useCatalog, type CatalogProduct } from '../lib/catalog';
 import { COLORS } from '../data/vocabularies';
 import {
-  colourLabelFor, dedupeColourOptions, isValidHex, normalizeHex, resolveColourOptions, validateColourOption,
+  dedupeColourOptions, isValidHex, normalizeHex, resolveColourOptions, validateColourOption,
   type ProductColourOption,
 } from '../lib/colours';
 
