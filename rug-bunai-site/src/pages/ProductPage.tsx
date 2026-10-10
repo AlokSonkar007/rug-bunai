@@ -13,7 +13,7 @@ import {
   type CustomColourRequest, type ProductColourOption,
 } from '../lib/colours';
 import {
-  SIZE_OPTIONS, STANDARD_SIZE_KEYS, feetOf, validateSizeFeet, customSizeEstimate, formatFtLabel,
+  SIZE_OPTIONS, STANDARD_SIZE_KEYS, feetOf, validateSizeFeet, formatFtLabel,
   stainCoatCostForFt, STAIN_COAT_RATE_INR_PER_SQFT,
   productRatePerSqft, resolveStandardSize, type ResolvedSize,
 } from '../lib/sizes';
@@ -140,17 +140,14 @@ export default function ProductPage() {
       : validateSizeFeet(w, l);
     return { w, l, valid: error === null, error };
   }, [custW, custL]);
-  /** Estimate derived from this rug's own rate card (base price ÷ base area).
+  /** Price from this rug's trusted ₹/sq-ft rate (admin-configured rate first,
+   *  else derived from its own priced offers) × the requested area.
    *  The studio confirms before production — no invented markup, no silent
    *  fallback to a standard-size price. */
   const customEstimate = useMemo(() => {
-    if (!product || !customDims.valid) return null;
-    const base = product.variants.find((v) => v.priceInr > 0) ?? product.variants[0];
-    if (!base || base.priceInr <= 0) return null;
-    return customSizeEstimate(
-      base.priceInr, feetOf(base.width), feetOf(base.length), customDims.w, customDims.l,
-    );
-  }, [product, customDims]);
+    if (!product || !customDims.valid || ratePerSqFt == null) return null;
+    return Math.round(ratePerSqFt * customDims.w * customDims.l);
+  }, [product, customDims, ratePerSqFt]);
 
   // ── Stain-resistant coating (optional add-on, ₹90/sq ft — sizes.ts rate) ──
   // Charge is ALWAYS derived from the actual selected numeric dimensions —

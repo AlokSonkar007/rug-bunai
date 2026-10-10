@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import {
   ORDER_STATUSES, fetchAllOrders, fetchMyOrderForAdmin, formatPaise, setOrderStatus,
+  markCodCollected, fetchOrderNotifications, type NotificationJobRow,
   type OrderDetailRow, type OrderItemRow, type OrderStatus,
 } from '../lib/orders';
 import { useCatalog, type CatalogProduct } from '../lib/catalog';
@@ -10,6 +11,7 @@ import { CARPET_CATEGORIES, COLORS, MATERIALS, TECHNIQUES } from '../data/vocabu
 import { getProduct, type Product } from '../data/products';
 import { rugImage } from '../lib/rugArt';
 import { productGalleryImages, removeGalleryImageAt } from '../lib/productGallery';
+import { productRatePerSqft } from '../lib/sizes';
 import {
   dedupeColourOptions, isValidHex, normalizeHex, resolveColourOptions, validateColourOption,
   type ProductColourOption,
@@ -514,7 +516,7 @@ function RailEditor({ which, idPrefix }: { which: 'newArrivalsRail' | 'bestSelle
 }
 
 /** Technique/room tile grids — edit each tile's copy (destination & art seed stay structural). */
-function TilesEditor({ which, idPrefix }: { which: 'techniqueTiles' | 'roomTiles'; idPrefix: string }) {
+function TilesEditor({ which, idPrefix, onUpload }: { which: 'techniqueTiles' | 'roomTiles'; idPrefix: string; onUpload: (f: File) => Promise<string> }) {
   const { content, saveContent } = useSiteContent();
   const tiles = content[which];
   const patchTile = (i: number, p: Partial<(typeof tiles)[number]>) =>
@@ -528,6 +530,14 @@ function TilesEditor({ which, idPrefix }: { which: 'techniqueTiles' | 'roomTiles
           <div style={{ paddingTop: 10 }}>
             <FieldEditor id={`${idPrefix}-${i}-title`} label="Title" value={t.title} onSave={(v) => patchTile(i, { title: v })} />
             <FieldEditor id={`${idPrefix}-${i}-blurb`} label="Blurb" value={t.blurb} onSave={(v) => patchTile(i, { blurb: v })} />
+            <ImageEditor
+              idPrefix={`${idPrefix}-${i}-img`}
+              label={`${t.title} image`}
+              currentUrl={t.imageUrl ?? null}
+              note="Leave unset to keep the generated artwork for this tile."
+              onUpload={onUpload}
+              onSave={async (url) => { await patchTile(i, { imageUrl: url }); }}
+            />
           </div>
         </details>
       ))}
@@ -725,9 +735,9 @@ function ProductContentEditor({ product, onUpload }: { product: CatalogProduct; 
         <textarea id={`pc-${product.slug}-care`} rows={3} value={draft.care} onChange={(e) => setDraft({ ...draft, care: e.target.value })} /></div>
       <div className="field"><label htmlFor={`pc-${product.slug}-specnotes`}>Specifications — extra notes (optional)</label>
         <textarea id={`pc-${product.slug}-specnotes`} rows={2} value={draft.specNotes} placeholder="Shown as an additional row in the Specifications table on this product's page." onChange={(e) => setDraft({ ...draft, specNotes: e.target.value })} /></div>
-      <div className="field" style={{ maxWidth: 260 }}><label htmlFor={`pc-${product.slug}-rate`}>Custom size ₹ per sq ft (optional)</label>
-        <input id={`pc-${product.slug}-rate`} type="number" min={1} step={1} inputMode="numeric" value={draft.customRate} placeholder="e.g. 4600" onChange={(e) => setDraft({ ...draft, customRate: e.target.value })} />
-        <span className="muted" style={{ fontSize: '0.74rem', marginTop: 4 }}>Used to price standard sizes without a configured offer and custom-size estimates. Leave blank to derive from this rug's own prices.</span></div>
+      <div className="field" style={{ maxWidth: 260 }}><label htmlFor={`pc-${product.slug}-rate`}>Price per square foot (₹/sq ft)</label>
+        <input id={`pc-${product.slug}-rate`} type="number" min={1} step={1} inputMode="numeric" value={draft.customRate} placeholder={(() => { const d = productRatePerSqft(product.variants, null); return d ? `derived: ₹${d.toLocaleString('en-IN')} / sq ft` : 'e.g. 4600'; })()} onChange={(e) => setDraft({ ...draft, customRate: e.target.value })} />
+        <span className="muted" style={{ fontSize: '0.74rem', marginTop: 4 }}>The rate used to calculate customer prices from rug area — it sets every standard size without a configured offer and all custom-size quotes. Leave blank to keep deriving from this rug's own prices (existing prices stay unchanged).</span></div>
       <ImageEditor
         idPrefix={`pc-${product.slug}`}
         label="Main product photo"
@@ -777,10 +787,10 @@ function HomepageContentEditor({ onUpload }: { onUpload: (f: File) => Promise<st
       <RailEditor which="newArrivalsRail" idPrefix="rail-new" />
       <RailEditor which="bestSellersRail" idPrefix="rail-best" />
       <BandEditor path="techniqueHeading" idPrefix="technique-heading" labels={{ heading: 'Technique & material heading', eyebrow: 'Eyebrow', title: 'Title' }} />
-      <TilesEditor which="techniqueTiles" idPrefix="technique-tiles" />
+      <TilesEditor which="techniqueTiles" idPrefix="technique-tiles" onUpload={onUpload} />
       <SplitBlockEditor which="craftSplit" idPrefix="craft-split" onUpload={onUpload} />
       <BandEditor path="roomsBand" idPrefix="rooms-band" labels={{ heading: 'Rooms band heading', eyebrow: 'Eyebrow', title: 'Title' }} />
-      <TilesEditor which="roomTiles" idPrefix="room-tiles" />
+      <TilesEditor which="roomTiles" idPrefix="room-tiles" onUpload={onUpload} />
       <SplitBlockEditor which="inspirationSplit" idPrefix="inspiration-split" onUpload={onUpload} />
       <BandEditor path="colourBand" idPrefix="colour-band" labels={{ heading: 'Shop by Colour section', eyebrow: 'Eyebrow', title: 'Title', sub: 'Supporting text' }} />
       <BandEditor path="newsletter" idPrefix="newsletter" labels={{ heading: 'Newsletter section', eyebrow: 'Eyebrow', title: 'Title', note: 'Note' }} />
@@ -1064,7 +1074,11 @@ export default function AdminPage() {
         <h2 className="subhead" style={{ marginBottom: 18 }}>Add a product</h2>
         <div className="form-grid-2">
           <div className="field"><label htmlFor="product-name">Name</label><input id="product-name" required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></div>
-          <div className="field"><label htmlFor="product-price">Price (₹)</label><input id="product-price" type="number" min="1" required value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} /></div>
+          <div className="field">
+            <label htmlFor="product-price">Price per square foot (₹/sq ft)</label>
+            <p className="muted" style={{ fontSize: '0.78rem', marginBottom: 6 }}>Rate used to calculate the customer's price from the rug's area — e.g. a ₹2,400/sq ft rate makes a 5 × 8 ft (40 sq ft) rug ₹96,000.</p>
+            <input id="product-price" type="number" min="1" step="1" required value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} />
+          </div>
         </div>
         <div className="field"><label htmlFor="product-slug">URL name (optional)</label><input id="product-slug" value={form.slug} onChange={(event) => setForm({ ...form, slug: slugify(event.target.value) })} placeholder="generated-from-name" /></div>
         <div className="field"><label htmlFor="product-description">Description</label><textarea id="product-description" rows={4} required value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></div>
@@ -1202,10 +1216,14 @@ function AdminOrdersPanel() {
   const [detail, setDetail] = useState<{ order: OrderDetailRow; items: OrderItemRow[] } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
+  const [notifs, setNotifs] = useState<Record<string, NotificationJobRow[]>>({});
 
   const load = useCallback(() => {
     fetchAllOrders()
-      .then((rows) => setOrders(rows))
+      .then(async (rows) => {
+        setOrders(rows);
+        setNotifs(await fetchOrderNotifications(rows.map((r) => r.id)));
+      })
       .catch((err) => setError(err instanceof Error ? err.message : 'Could not load orders.'));
   }, []);
 
@@ -1234,6 +1252,21 @@ function AdminOrdersPanel() {
     }
   };
 
+  const collectCod = async (orderId: string) => {
+    if (!window.confirm('Confirm that the cash for this order has physically been received before marking it paid.')) return;
+    setBusyId(orderId);
+    setStatusMsg(null);
+    try {
+      await markCodCollected(orderId);
+      setStatusMsg(`Cash collected for order #${orderId.slice(0, 8).toUpperCase()}.`);
+      load();
+    } catch (err) {
+      setStatusMsg(err instanceof Error ? err.message : 'Could not record the collection.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   if (error) return <p className="field-error" role="alert">{error} — has supabase/migrations/0005_orders.sql been applied?</p>;
   if (orders === null) return <p className="muted">Loading orders…</p>;
   if (orders.length === 0) return <p className="muted">No orders yet. They will appear here as soon as customers check out.</p>;
@@ -1249,8 +1282,14 @@ function AdminOrdersPanel() {
               <span>{new Date(o.created_at).toLocaleString('en-IN')}</span>
               <span>{o.full_name} · {o.city}</span>
               <span className={`order-status order-status-${o.status}`}>{o.status.replace('_', ' ')}</span>
+              <span className={`order-status order-status-pay-${o.payment_status}`}>payment: {o.payment_status}</span>
               <strong>{formatPaise(o.total_paise)}</strong>
             </button>
+            {o.payment_status === 'pending' && (
+              <button className="studio-button ghost" disabled={busyId === o.id} onClick={() => collectCod(o.id)}>
+                Mark COD collected
+              </button>
+            )}
             <label className="admin-order-status">
               Status{' '}
               <select
@@ -1279,6 +1318,24 @@ function AdminOrdersPanel() {
           <p className="muted" style={{ fontSize: '0.8rem', marginTop: 10 }}>
             Deliver to {detail.order.full_name}, {detail.order.address}, {detail.order.city} — {detail.order.pin} · {detail.order.email}
           </p>
+          {(notifs[openId]?.length ?? 0) > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <h4 className="subhead" style={{ fontSize: '0.85rem' }}>Notifications</h4>
+              {notifs[openId].map((n) => (
+                <p key={n.id} className="card-meta" style={{ margin: '4px 0', fontSize: '0.78rem' }}>
+                  <span className={`order-status order-status-notif-${n.status}`}>{n.status}</span>{' '}
+                  {n.recipient_kind} · {n.channel} → {n.destination || '(no destination)'}
+                  {n.attempts > 0 ? ` · ${n.attempts} attempt(s)` : ''}
+                  {n.last_error ? ` · ${n.last_error}` : ''}
+                </p>
+              ))}
+              {notifs[openId].some((n) => n.status === 'failed') && (
+                <p className="muted" style={{ fontSize: '0.72rem', marginTop: 6 }}>
+                  Failed jobs are retried automatically by the notification worker with exponential backoff.
+                </p>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
