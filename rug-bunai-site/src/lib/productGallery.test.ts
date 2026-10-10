@@ -117,8 +117,8 @@ const baseInput: NewProductInput = {
   name: 'Test Rug',
   slug: 'test-rug',
   description: 'A test rug.',
-  // imageUrl lives on the DB row column, not the Product type.
-  imageUrl: P, as never,
+  // Primary photo URL (persisted to the DB row's image_url column).
+  imageUrl: P,
   techniqueSlug: 'hand-knotted',
   materialSlug: 'wool',
   roomSlugs: ['living-room'],
@@ -134,7 +134,7 @@ describe('new-product classification payload', () => {
     expect(p.materialSlug).toBe('bamboo-silk');
     expect(TECHNIQUES.some((t) => t.slug === p.techniqueSlug)).toBe(true);
     expect(MATERIALS.some((m) => m.slug === p.materialSlug)).toBe(true);
-    expect(p.imageUrl).toBeUndefined(); // primary lives on the DB row column
+    expect((p as { imageUrl?: string }).imageUrl).toBeUndefined(); // primary lives on the DB row column
     expect(p.gallery).toEqual([A]); // primary URL stripped, deduped
   });
 
@@ -148,7 +148,7 @@ describe('new-product classification payload', () => {
   });
 
   it('products without photography fall back to generated art views (legacy behaviour)', () => {
-    const legacy = { thumbnailCount: 3 } as never;
+    const legacy = { thumbnailCount: 3, colorSlugs: ['ivory'], techniqueSlug: 'hand-knotted', styleSlugs: ['modern'] } as never;
     expect(galleryViewCount(legacy)).toBe(3);
     expect(galleryImageAt(legacy, 0, 100, 100)).toContain('svg'); // generated artwork data URI
   });
