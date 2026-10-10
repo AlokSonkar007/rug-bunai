@@ -14,6 +14,7 @@ import {
 } from '../lib/colours';
 import {
   SIZE_OPTIONS, STANDARD_SIZE_KEYS, feetOf, validateSizeFeet, customSizeEstimate, formatFtLabel,
+  stainCoatCostForFt, STAIN_COAT_RATE_INR_PER_SQFT,
   productRatePerSqft, resolveStandardSize, type ResolvedSize,
 } from '../lib/sizes';
 
@@ -46,6 +47,8 @@ export default function ProductPage() {
   const [sizeChoice, setSizeChoice] = useState<string | null>(null); // variant id | 'custom'
   const [custW, setCustW] = useState('');
   const [custL, setCustL] = useState('');
+  // Optional stain-resistant coating add-on (₹90/sq ft — shared rate in sizes.ts).
+  const [coating, setCoating] = useState(false);
   const cart = useCart();
 
   useEffect(() => {
@@ -55,6 +58,7 @@ export default function ProductPage() {
     setSizeChoice(null);
     setCustW('');
     setCustL('');
+    setCoating(false);
     setAngle(0);
     // Switching rugs must never carry a previous rug's colour selection over.
     setCustomOpen(false);
@@ -148,6 +152,18 @@ export default function ProductPage() {
     );
   }, [product, customDims]);
 
+  // ── Stain-resistant coating (optional add-on, ₹90/sq ft — sizes.ts rate) ──
+  // Charge is ALWAYS derived from the actual selected numeric dimensions —
+  // standard pill or entered custom feet — never from a label and never a
+  // browser-submitted amount. cart/checkout recompute the same way.
+  const coatDims = choosingCustomSize
+    ? (customDims.valid ? { w: customDims.w, l: customDims.l } : null)
+    : (selected ? { w: feetOf(selected.width), l: feetOf(selected.length) } : null);
+  const coatSqft = coatDims ? Math.round(coatDims.w * coatDims.l * 10) / 10 : 0;
+  const coatChargeInr = coating && coatDims ? stainCoatCostForFt(coatDims.w, coatDims.l) : 0;
+  const unitBaseInr = choosingCustomSize ? (customEstimate ?? 0) : (selected?.priceInr ?? 0);
+  const withCoatTotalInr = unitBaseInr + coatChargeInr;
+
   if (!product) {
     return (
       <div className="wrap empty-state">
@@ -194,7 +210,8 @@ export default function ProductPage() {
         colorName: currentColourLabel,
         ...(usingCustom && selectedCustom ? { colorHex: selectedCustom.hex } : {}),
         priceInr: customEstimate,
-        note: `Custom size request: ${formatFtLabel(customDims.w, customDims.l)} (≈ ${Math.round(customDims.w * customDims.l)} sq ft). Estimate ${formatINR(customEstimate)} at this rug's derived ₹/sq ft rate — production feasibility and final pricing to be confirmed by Rug Bunai before weaving.${usingCustom ? ` Custom colour: ${currentColourLabel}.` : ''}`,
+        ...(coating ? { coating: true } : {}),
+        note: `Custom size request: ${formatFtLabel(customDims.w, customDims.l)} (≈ ${Math.round(customDims.w * customDims.l)} sq ft). Estimate ${formatINR(customEstimate)} at this rug's derived ₹/sq ft rate — production feasibility and final pricing to be confirmed by Rug Bunai before weaving.${coating ? ` Stain-resistant coating requested: +${formatINR(stainCoatCostForFt(customDims.w, customDims.l))} (${Math.round(customDims.w * customDims.l * 10) / 10} sq ft × ₹${STAIN_COAT_RATE_INR_PER_SQFT}/sq ft).` : ''}${usingCustom ? ` Custom colour: ${currentColourLabel}.` : ''}`,
       });
       notify(`Custom-size request added — ${formatFtLabel(customDims.w, customDims.l)}`);
       return;
@@ -214,7 +231,8 @@ export default function ProductPage() {
         colorName: currentColourLabel,
         colorHex: selectedCustom.hex,
         priceInr: selected.priceInr,
-        note: `Custom colour request: ${currentColourLabel} (${selectedCustom.hex}). Feasibility and final shade to be confirmed by Rug Bunai before weaving.`,
+        ...(coating ? { coating: true } : {}),
+        note: `Custom colour request: ${currentColourLabel} (${selectedCustom.hex}). Feasibility and final shade to be confirmed by Rug Bunai before weaving.${coating ? ` Stain-resistant coating requested: +${formatINR(stainCoatCostForFt(feetOf(selected.width), feetOf(selected.length)))} (${Math.round(feetOf(selected.width) * feetOf(selected.length) * 10) / 10} sq ft × ₹${STAIN_COAT_RATE_INR_PER_SQFT}/sq ft).` : ''}`,
       });
       notify(`Custom-colour request added — ${currentColourLabel}, ${selected.sizeLabel}`);
       return;
@@ -235,12 +253,13 @@ export default function ProductPage() {
         colorName: currentColourLabel,
         ...(usingCustom && selectedCustom ? { colorHex: selectedCustom.hex } : {}),
         priceInr: selected.priceInr,
-        note: `Made-to-order: ${selected.sizeLabel} in ${currentColourLabel}. Woven on request at this design's ₹/sq ft rate — atelier confirms dispatch window after order review.`,
+        ...(coating ? { coating: true } : {}),
+        note: `Made-to-order: ${selected.sizeLabel} in ${currentColourLabel}. Woven on request at this design's ₹/sq ft rate — atelier confirms dispatch window after order review.${coating ? ` Stain-resistant coating requested: +${formatINR(stainCoatCostForFt(feetOf(selected.width), feetOf(selected.length)))} (${Math.round(feetOf(selected.width) * feetOf(selected.length) * 10) / 10} sq ft × ₹${STAIN_COAT_RATE_INR_PER_SQFT}/sq ft).` : ''}`,
       });
       notify(`Added ${product.name} — ${selected.sizeLabel} (made to order)`);
       return;
     }
-    cart.add(selected.id);
+    cart.add(selected.id, { coating });
     notify(`Added ${product.name} — ${selected.sizeLabel} to your cart`);
   };
 
@@ -465,6 +484,30 @@ export default function ProductPage() {
                 </p>
               </div>
             )}
+          </div>
+
+          {/* Optional stain-resistant coating — ₹90 per sq ft, charged on the
+              ACTUAL selected dimensions. Off by default; fully reversible. */}
+          <div className="coating-row" style={{ marginTop: 20 }}>
+            <label className="coating-toggle">
+              <input
+                type="checkbox"
+                checked={coating}
+                disabled={!coatDims}
+                onChange={(e) => setCoating(e.target.checked)}
+              />
+              <span>Add stain-resistant protection for {formatINR(STAIN_COAT_RATE_INR_PER_SQFT)} per sq ft</span>
+            </label>
+            {coating && coatDims ? (
+              <p className="muted" aria-live="polite" style={{ fontSize: '0.85rem', marginTop: 6 }}>
+                Coating charge: <strong>{formatINR(coatChargeInr)}</strong> = {coatSqft} sq ft × {formatINR(STAIN_COAT_RATE_INR_PER_SQFT)}/sq ft.
+                Adds to the rug price above.
+              </p>
+            ) : coating && !coatDims ? (
+              <p className="field-error" style={{ fontSize: '0.8rem', marginTop: 6 }}>
+                Enter valid width and length in feet to calculate the coating charge.
+              </p>
+            ) : null}
           </div>
 
           <button
