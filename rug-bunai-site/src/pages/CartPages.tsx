@@ -99,7 +99,6 @@ export function CartPage() {
 // ── Frictionless three-step checkout (Apple-style: minimal steps, retained info) ──
 
 type Errors = Partial<Record<'email' | 'name' | 'phone' | 'address' | 'city' | 'pin', string>>;
-type Errors = Partial<Record<'email' | 'name' | 'address' | 'city' | 'pin', string>>;
 
 export function CheckoutPage() {
   const cart = useCart();

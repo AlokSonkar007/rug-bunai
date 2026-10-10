@@ -5,9 +5,6 @@ import {
   ORDER_STATUSES, fetchAllOrders, fetchMyOrderForAdmin, fetchOrderNotifications, formatPaise,
   markCodCollected, retryNotification, setOrderStatus, syncTrustedPrices,
   type NotificationJobRow, type OrderDetailRow, type OrderItemRow, type OrderStatus,
-  ORDER_STATUSES, fetchAllOrders, fetchMyOrderForAdmin, formatPaise, setOrderStatus,
-  markCodCollected, fetchOrderNotifications, type NotificationJobRow,
-  type OrderDetailRow, type OrderItemRow, type OrderStatus,
 } from '../lib/orders';
 import { useCatalog, type CatalogProduct } from '../lib/catalog';
 import { CARPET_CATEGORIES, COLORS, MATERIALS, TECHNIQUES } from '../data/vocabularies';
@@ -1221,11 +1218,10 @@ function AdminOrdersPanel() {
   const [error, setError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [detail, setDetail] = useState<{ order: OrderDetailRow; items: OrderItemRow[] } | null>(null);
-  const [notifs, setNotifs] = useState<NotificationJobRow[]>([]);
+  const [notifs, setNotifs] = useState<Record<string, NotificationJobRow[]>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
-  const [notifs, setNotifs] = useState<Record<string, NotificationJobRow[]>>({});
 
   const load = useCallback(() => {
     fetchAllOrders()
@@ -1239,11 +1235,16 @@ function AdminOrdersPanel() {
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
-    if (!openId) { setDetail(null); setNotifs([]); return; }
+    if (!openId) { setDetail(null); return; }
     let cancelled = false;
-    Promise.all([fetchMyOrderForAdmin(openId), fetchOrderNotifications(openId)])
-      .then(([res, jobs]) => { if (!cancelled) { setDetail(res); setNotifs(jobs); } })
-      .catch(() => { if (!cancelled) { setDetail(null); setNotifs([]); } });
+    Promise.all([fetchMyOrderForAdmin(openId), fetchOrderNotifications([openId])])
+      .then(([res, grouped]) => {
+        if (!cancelled) {
+          setDetail(res);
+          setNotifs((prev) => ({ ...prev, [openId]: grouped[openId] ?? [] }));
+        }
+      })
+      .catch(() => { if (!cancelled) { setDetail(null); setNotifs((prev) => ({ ...prev, [openId]: [] })); } });
     return () => { cancelled = true; };
   }, [openId]);
 
@@ -1255,8 +1256,9 @@ function AdminOrdersPanel() {
       setStatusMsg(ok);
       load();
       // Refresh the open detail + notification log quietly.
-      const [res, jobs] = await Promise.all([fetchMyOrderForAdmin(orderId), fetchOrderNotifications(orderId)]);
-      setDetail(res); setNotifs(jobs);
+      const [res, grouped] = await Promise.all([fetchMyOrderForAdmin(orderId), fetchOrderNotifications([orderId])]);
+      setDetail(res);
+      setNotifs((prev) => ({ ...prev, [orderId]: grouped[orderId] ?? [] }));
     } catch (err) {
       setStatusMsg(err instanceof Error ? err.message : 'Could not update the order.');
     } finally {
@@ -1274,7 +1276,7 @@ function AdminOrdersPanel() {
 
   const retryJob = (job: NotificationJobRow) =>
     runAction(job.order_id, () => retryNotification(job.id),
-      `${job.channel} notification (${job.recipient_type}) requeued — the worker will resend it shortly.`);
+      `${job.channel} notification (${job.recipient_kind}) requeued — the worker will resend it shortly.`);
 
   const syncPrices = async () => {
     setSyncMsg(null);
@@ -1287,22 +1289,6 @@ function AdminOrdersPanel() {
   };
 
   if (error) return <p className="field-error" role="alert">{error} — have supabase/migrations/0005_orders.sql and 0007_cod_orders_trusted_pricing.sql been applied?</p>;
-  const collectCod = async (orderId: string) => {
-    if (!window.confirm('Confirm that the cash for this order has physically been received before marking it paid.')) return;
-    setBusyId(orderId);
-    setStatusMsg(null);
-    try {
-      await markCodCollected(orderId);
-      setStatusMsg(`Cash collected for order #${orderId.slice(0, 8).toUpperCase()}.`);
-      load();
-    } catch (err) {
-      setStatusMsg(err instanceof Error ? err.message : 'Could not record the collection.');
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  if (error) return <p className="field-error" role="alert">{error} — has supabase/migrations/0005_orders.sql been applied?</p>;
   if (orders === null) return <p className="muted">Loading orders…</p>;
 
   return (
@@ -1326,15 +1312,12 @@ function AdminOrdersPanel() {
               <span>{new Date(o.created_at).toLocaleString('en-IN')}</span>
               <span>{o.full_name} · {o.city}</span>
               <span className={`order-status order-status-${o.status}`}>{o.status.replace('_', ' ')}</span>
-              <span className={`order-status order-status-${o.payment_status}`}>
-                {o.payment_method.toUpperCase()} {o.payment_status}
-              </span>
               <span className={`order-status order-status-pay-${o.payment_status}`}>payment: {o.payment_status}</span>
               <strong>{formatPaise(o.total_paise)}</strong>
             </button>
-            {o.payment_status === 'pending' && (
-              <button className="studio-button ghost" disabled={busyId === o.id} onClick={() => collectCod(o.id)}>
-                Mark COD collected
+            {o.payment_status === 'pending' && o.payment_method === 'cod' && (
+              <button className="studio-button ghost" disabled={busyId === o.id || o.status !== 'delivered'} onClick={() => collectCash(o)}>
+                Mark cash collected
               </button>
             )}
             <label className="admin-order-status">
@@ -1394,11 +1377,11 @@ function AdminOrdersPanel() {
             )}
           </div>
           <h4 className="subhead" style={{ marginTop: 18, fontSize: '1rem' }}>Notifications</h4>
-          {notifs.length === 0 && <p className="muted" style={{ fontSize: '0.8rem' }}>No notification jobs recorded for this order.</p>}
-          {notifs.map((j) => (
+          {(notifs[openId]?.length ?? 0) === 0 && <p className="muted" style={{ fontSize: '0.8rem' }}>No notification jobs recorded for this order.</p>}
+          {(notifs[openId] ?? []).map((j) => (
             <p key={j.id} className="card-meta" style={{ margin: '6px 0', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-              <span>{j.channel} → {j.recipient_type}{j.to_address ? ` (${j.to_address})` : ''}</span>
-              <span className={`order-status order-status-${j.status === 'sent' ? 'paid' : j.status === 'failed' ? 'cancelled' : 'pending'}`}>
+              <span>{j.channel} → {j.recipient_kind}{j.destination ? ` (${j.destination})` : ''}</span>
+              <span className={`order-status order-status-notif-${j.status}`}>
                 {j.status}{j.attempts > 0 ? ` · ${j.attempts} attempt${j.attempts === 1 ? '' : 's'}` : ''}
               </span>
               {j.last_error && <span className="field-error" style={{ fontSize: '0.75rem' }}>{j.last_error}</span>}
@@ -1409,23 +1392,10 @@ function AdminOrdersPanel() {
               )}
             </p>
           ))}
-          {(notifs[openId]?.length ?? 0) > 0 && (
-            <div style={{ marginTop: 12 }}>
-              <h4 className="subhead" style={{ fontSize: '0.85rem' }}>Notifications</h4>
-              {notifs[openId].map((n) => (
-                <p key={n.id} className="card-meta" style={{ margin: '4px 0', fontSize: '0.78rem' }}>
-                  <span className={`order-status order-status-notif-${n.status}`}>{n.status}</span>{' '}
-                  {n.recipient_kind} · {n.channel} → {n.destination || '(no destination)'}
-                  {n.attempts > 0 ? ` · ${n.attempts} attempt(s)` : ''}
-                  {n.last_error ? ` · ${n.last_error}` : ''}
-                </p>
-              ))}
-              {notifs[openId].some((n) => n.status === 'failed') && (
-                <p className="muted" style={{ fontSize: '0.72rem', marginTop: 6 }}>
-                  Failed jobs are retried automatically by the notification worker with exponential backoff.
-                </p>
-              )}
-            </div>
+          {(notifs[openId] ?? []).some((j) => j.status === 'failed') && (
+            <p className="muted" style={{ fontSize: '0.72rem', marginTop: 6 }}>
+              Failed jobs are retried automatically by the notification worker with exponential backoff.
+            </p>
           )}
         </div>
       )}

@@ -270,16 +270,14 @@ export type OrderItemRow = {
 export type NotificationJobRow = {
   id: string;
   order_id: string;
+  recipient_kind: 'customer' | 'admin';
   channel: 'email' | 'whatsapp';
-  recipient_type: 'customer' | 'admin';
-  to_address: string;
-  status: 'queued' | 'processing' | 'sent' | 'failed' | 'skipped';
+  destination: string;
+  status: 'pending' | 'sending' | 'sent' | 'failed' | 'skipped';
   attempts: number;
-  max_attempts: number;
   last_error: string | null;
   provider_message_id: string | null;
-  created_at: string;
-  updated_at: string;
+  next_attempt_at: string;
 };
 
 /** Newest-first list of the signed-in customer's own orders (RLS-enforced). */
@@ -328,18 +326,6 @@ export async function fetchAllOrders(): Promise<(OrderDetailRow & { customer_id:
   return (data ?? []) as (OrderDetailRow & { customer_id: string })[];
 }
 
-/** Admin-only: notification job log for one order (RLS restricts to admins). */
-export async function fetchOrderNotifications(orderId: string): Promise<NotificationJobRow[]> {
-  if (!supabase) throw new Error('Supabase is not configured.');
-  const { data, error } = await supabase
-    .from('order_notifications')
-    .select('*')
-    .eq('order_id', orderId)
-    .order('created_at', { ascending: true });
-  if (error) throw error;
-  return (data ?? []) as NotificationJobRow[];
-}
-
 export const ORDER_STATUSES = ['placed', 'in_production', 'shipped', 'delivered', 'cancelled'] as const;
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 
@@ -366,29 +352,11 @@ export async function retryNotification(jobId: string): Promise<void> {
   if (!supabase) throw new Error('Supabase is not configured.');
   const { error } = await supabase.rpc('retry_order_notification', { p_id: jobId });
   if (error) throw new Error(`Could not requeue the notification: ${error.message}`);
-/** Admin: confirm the COD cash has physically been received. Server-side RPC
- *  (0008) enforces admin-only access and refuses double-collection. */
-export async function markCodCollected(orderId: string): Promise<void> {
-  if (!supabase) throw new Error('Supabase is not configured.');
-  const { error } = await supabase.rpc('mark_cod_collected', { p_order_id: orderId });
-  if (error) throw new Error(`Could not record the cash collection: ${error.message}`);
 }
 
 /** Per-recipient delivery state of the order's email/WhatsApp notifications
- *  (outbox rows from migration 0007). Returns [] when the outbox migration
- *  hasn't been applied yet so the Studio degrades gracefully. */
-export type NotificationJobRow = {
-  id: string;
-  recipient_kind: 'customer' | 'admin';
-  channel: 'email' | 'whatsapp';
-  destination: string;
-  status: 'pending' | 'sending' | 'sent' | 'failed' | 'skipped';
-  attempts: number;
-  last_error: string | null;
-  provider_message_id: string | null;
-  next_attempt_at: string;
-};
-
+ *  (outbox rows from migration 0007). Returns {} when the outbox migration
+ *  hasn't been applied yet so the panel degrades gracefully. */
 export async function fetchOrderNotifications(orderIds: string[]): Promise<Record<string, NotificationJobRow[]>> {
   if (!supabase || orderIds.length === 0) return {};
   const { data, error } = await supabase
@@ -397,7 +365,7 @@ export async function fetchOrderNotifications(orderIds: string[]): Promise<Recor
     .in('order_id', orderIds.slice(0, 50));
   if (error) return {}; // outbox table not created yet — non-fatal for the panel
   const grouped: Record<string, NotificationJobRow[]> = {};
-  for (const row of (data ?? []) as (NotificationJobRow & { order_id: string })[]) {
+  for (const row of (data ?? []) as NotificationJobRow[]) {
     (grouped[row.order_id] ??= []).push(row);
   }
   return grouped;
