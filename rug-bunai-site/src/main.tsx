@@ -2,7 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import Layout from './components/Layout';
-import CollectionView from './components/CollectionView';
+import CollectionView, { CategoryCollectionView } from './components/CollectionView';
 import HomePage from './pages/HomePage';
 import ProductPage from './pages/ProductPage';
 import { ArticlePage, JournalPage } from './pages/JournalPage';
@@ -26,6 +26,10 @@ const router = createBrowserRouter([
     children: [
       { index: true, element: <HomePage /> },
       { path: 'rugs', element: <CollectionView /> },
+      // Curated design-category collections (e.g. /collections/shaggy-carpets).
+      // Declared before 'rugs/:slug' so product slugs keep priority elsewhere;
+      // this is its own branch and never collides with product detail pages.
+      { path: 'collections/:categorySlug', element: <CategoryCollectionView /> },
       { path: 'rugs/:slug', element: <ProductPage /> },
       { path: 'journal', element: <JournalPage /> },
       { path: 'journal/:slug', element: <ArticlePage /> },

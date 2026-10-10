@@ -1,11 +1,10 @@
 import { useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { colorHex, findTerm, MATERIALS, ROOMS, STYLES } from '../data/vocabularies';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { carpetCategoryPath, colorHex, findCarpetCategory, findTerm, MATERIALS, ROOMS, STYLES } from '../data/vocabularies';
 import {
-  appliedChips, EMPTY_FACETS, facetsFromSearch, facetsToSearch, removeChip,
+  appliedChips, categoryTitle, EMPTY_FACETS, facetsFromSearch, facetsToSearch, removeChip,
   runSearch, SORT_OPTIONS, type FacetGroup, type FacetState,
 } from '../lib/search';
-import { categoryTitle, productsInCategory } from '../lib/search';
 import { ProductCard, Reveal } from './ProductCard';
 import { useCatalog } from '../lib/catalog';
 
@@ -115,6 +114,7 @@ export function FilterPanel({
 export default function CollectionView({ categoryPath }: { categoryPath?: string }) {
   const [sp, setSp] = useSearchParams();
   const [sheetOpen, setSheetOpen] = useState(false);
+  const navigate = useNavigate();
   const { products } = useCatalog();
 
   const baseState = useMemo<FacetState>(() => facetsFromSearch(sp), [sp]);
@@ -148,6 +148,9 @@ export default function CollectionView({ categoryPath }: { categoryPath?: string
   const intro = categoryPath
     ? 'Every piece below is knotted, tufted or woven by hand in our Bhadohi workshops — filter to narrow by what matters to your room.'
     : 'Browse the full archive of designs. Combine filters freely — counts update live so you never reach a dead end.';
+  // On a dedicated collection route, "clearing" means leaving the category
+  // constraint too — reset straight back to the full catalogue.
+  const resetFilters = () => (categoryPath ? navigate('/rugs') : update(EMPTY_FACETS));
 
   return (
     <div className="wrap section">
@@ -202,7 +205,14 @@ export default function CollectionView({ categoryPath }: { categoryPath?: string
             <div className="empty-state">
               <h2 className="headline">Nothing matches that combination.</h2>
               <p className="muted">Try removing a filter — rug names, fibres and rooms are all searchable.</p>
-              <button className="btn" style={{ marginTop: 22 }} onClick={() => update(EMPTY_FACETS)}>Reset filters</button>
+              <button className="btn" style={{ marginTop: 22 }} onClick={resetFilters}>Reset filters</button>
+              {categoryPath && (
+                <p className="muted" style={{ marginTop: 16 }}>
+                  Or return to{' '}
+                  <Link to="/rugs">all rugs</Link>{' '}
+                  · <Link to="/">Collections home</Link>
+                </p>
+              )}
             </div>
           ) : (
             <div className="grid-products">
@@ -236,4 +246,16 @@ export default function CollectionView({ categoryPath }: { categoryPath?: string
   );
 }
 
-export { productsInCategory };
+/**
+ * Route wrapper for /collections/:categorySlug — turns the URL param into the
+ * canonical curated-category path and reuses CollectionView's existing facet
+ * pipeline unchanged. Unknown slugs degrade safely (CollectionView shows an
+ * honest empty state with a reset path) rather than crashing.
+ */
+export function CategoryCollectionView() {
+  const { categorySlug } = useParams();
+  const term = categorySlug ? findCarpetCategory(categorySlug) : undefined;
+  // Unknown slugs become a path no product can carry → CollectionView's honest
+  // empty state with links back to all rugs / collections home.
+  return <CollectionView categoryPath={carpetCategoryPath(term?.slug ?? 'unknown')} />;
+}

@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { PRODUCTS } from '../data/products';
 import { CARPET_CATEGORIES, carpetCategoryPath, COLORS, colorHex } from '../data/vocabularies';
 import {
+  allCategoryPaths,
+  categoryTitle,
   colourPalette,
   EMPTY_FACETS,
   appliedChips,
   facetsFromSearch,
   facetsToSearch,
+  productsInCategory,
   removeChip,
   runSearch,
 } from './search';
@@ -126,5 +129,110 @@ describe('shop-by-colour palette integration', () => {
     const f = facetsFromSearch(new URLSearchParams('color=chartreuse-not-real'));
     const { total } = runSearch(f);
     expect(total).toBe(0);
+  });
+});
+
+// ── Task 4: curated category collections (15 categories) ────────────────────
+
+describe('curated carpet categories (Collections menu)', () => {
+  const EXPECTED_LABELS = [
+    'Irregular Shaped Carpets', 'Shaggy Carpets', 'Round Rugs', 'Round Shaggy Carpets',
+    'Solid Carpets', 'Irani Carpets', 'Modern Abstract Carpets', 'Designer Carpets',
+    'Persian Wool Rugs and Carpets', 'Dope Carpets', 'Artificial Grass Carpets',
+    'Anime Carpets', 'Floral Carpets', 'Geometrical Carpets', 'Traditional Carpets',
+  ];
+
+  it('defines exactly the 15 requested categories with URL-safe slugs', () => {
+    expect(CARPET_CATEGORIES.map((c) => c.label)).toEqual(EXPECTED_LABELS);
+    CARPET_CATEGORIES.forEach((c) => expect(c.slug).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/));
+    // Suggested slugs from the spec are honoured.
+    expect(CARPET_CATEGORIES.map((c) => c.slug)).toContain('shaggy-carpets');
+    expect(CARPET_CATEGORIES.map((c) => c.slug)).toContain('irregular-shaped-carpets');
+    expect(CARPET_CATEGORIES.map((c) => c.slug)).toContain('persian-wool-rugs-and-carpets');
+  });
+
+  it('every category serialises & round-trips through the facet URL', () => {
+    CARPET_CATEGORIES.forEach((c) => {
+      const f = facetsFromSearch(new URLSearchParams(`category=${c.slug}`));
+      expect(f.categorySlug).toBe(c.slug);
+      expect(facetsToSearch(f).get('category')).toBe(c.slug);
+    });
+  });
+
+  it('category filtering returns exactly the products assigned to each category', () => {
+    CARPET_CATEGORIES.forEach((c) => {
+      const path = carpetCategoryPath(c.slug);
+      const expected = PRODUCTS.filter((p) => p.categoryPaths.includes(path));
+      const { results } = runSearch({ ...EMPTY_FACETS, categorySlug: c.slug });
+      expect(results.map((p) => p.id).sort()).toEqual(expected.map((p) => p.id).sort());
+    });
+  });
+
+  it('category + colour combine with AND semantics across groups', () => {
+    const slug = 'round-rugs';
+    const inCat = PRODUCTS.filter((p) => p.categoryPaths.includes(carpetCategoryPath(slug)));
+    if (inCat.length) {
+      const color = inCat[0].variants[0].colorSlug;
+      const f = facetsFromSearch(new URLSearchParams(`category=${slug}&color=${color}`));
+      expect(f.categorySlug).toBe(slug);
+      const { results } = runSearch(f);
+      expect(results.every((p) => p.categoryPaths.includes(carpetCategoryPath(slug)))).toBe(true);
+      expect(results.every((p) => p.variants.some((v) => v.colorSlug === color))).toBe(true);
+    } else {
+      // Empty category still composes without crashing.
+      expect(runSearch({ ...EMPTY_FACETS, categorySlug: slug, colors: ['navy'] }).total).toBe(0);
+    }
+  });
+
+  it('removing the category chip restores the broader result set', () => {
+    // Curated categories currently have no assigned products, so this exercises
+    // the full chip lifecycle on a real curated slug ('geometrical-carpets')
+    // combined with a stocked size facet. Removing the category chip must
+    // restore the broader (size-filtered) result set.
+    const f = facetsFromSearch(new URLSearchParams('category=geometrical-carpets&size=medium'));
+    expect(f.categorySlug).toBe('geometrical-carpets'); // validated against CARPET_CATEGORIES
+    const chip = appliedChips(f).find((x) => x.group === 'categorySlug')!;
+    expect(chip.label).toBe('Geometrical Carpets');
+    const cleared = removeChip(f, chip);
+    expect(cleared.categorySlug).toBeNull();
+    expect(cleared.sizeBucket).toBe('medium'); // other facets preserved when clearing
+    expect(runSearch(f).total).toBe(0);        // honest empty state for unstocked category
+    expect(runSearch(cleared).total).toBeGreaterThan(0);
+  });
+
+  it('curated categories with no stock still clear correctly and restore the full catalogue', () => {
+    const emptyCat = CARPET_CATEGORIES.find(
+      (c) => !PRODUCTS.some((p) => p.categoryPaths.includes(carpetCategoryPath(c.slug))),
+    )!;
+    const f = facetsFromSearch(new URLSearchParams(`category=${emptyCat.slug}`));
+    expect(f.categorySlug).toBe(emptyCat.slug);
+    expect(runSearch(f).total).toBe(0);
+    const chip = appliedChips(f).find((x) => x.group === 'categorySlug')!;
+    expect(chip.label).toBe(emptyCat.label);
+    const cleared = removeChip(f, chip);
+    expect(cleared.categorySlug).toBeNull();
+    expect(runSearch(cleared).total).toBeGreaterThan(0);
+  });
+
+  it('unknown category slugs never crash and yield an honest empty state', () => {
+    const f = facetsFromSearch(new URLSearchParams('category=not-a-real-category'));
+    expect(f.categorySlug).toBeNull(); // URL facet degrades to no filter
+    const { total } = runSearch({ ...EMPTY_FACETS, categorySlug: 'not-a-real-category' });
+    expect(total).toBe(0);
+  });
+
+  it('categories with no assigned products exist as valid empty collections', () => {
+    // Curated axis is independent of current stock — empty categories must not break anything.
+    CARPET_CATEGORIES.forEach((c) => {
+      const path = carpetCategoryPath(c.slug);
+      expect(() => productsInCategory(path)).not.toThrow();
+    });
+    expect(allCategoryPaths().length).toBeGreaterThanOrEqual(CARPET_CATEGORIES.length);
+  });
+
+  it('category route titles resolve for every curated category', () => {
+    CARPET_CATEGORIES.forEach((c) => {
+      expect(categoryTitle(carpetCategoryPath(c.slug))).toBe(c.label);
+    });
   });
 });
