@@ -664,6 +664,66 @@ function ProductsContentTab() {
   );
 }
 
+/** Homepage Products — photo control for the products actually shown on the
+ *  public homepage (New arrivals / Best sellers rails + hero slideshow). Saves
+ *  a homepage-only override; the catalogue & product-page image stays untouched. */
+function HomepageProductsEditor({ onUpload }: { onUpload: (file: File) => Promise<string> }) {
+  const { products } = useCatalog();
+  const { content, saveProductHomeImage } = useSiteContent();
+
+  const bestSellers = products.filter((p) => p.bestSellerRank).slice(0, 6);
+  const newArrivals = [...products].sort((a, b) => a.addedDaysAgo - b.addedDaysAgo).slice(0, 6);
+  // Hero slides seed from a product when no direct hero image is uploaded —
+  // badge those rugs so admins know the photo also feeds the slideshow.
+  const heroSlugs = new Set(content.heroSlides.filter((s) => !s.imageUrl).map((s) => s.productSlug));
+
+  const sections: Array<{ title: string; list: typeof products }> = [
+    { title: 'New arrivals rail', list: newArrivals },
+    { title: 'Best sellers rail', list: bestSellers },
+  ];
+
+  return (
+    <div className="summary-card" style={{ padding: 18 }}>
+      <h3 className="subhead" style={{ marginBottom: 6 }}>Homepage Products</h3>
+      <p className="muted" style={{ fontSize: '0.8rem', marginBottom: 14 }}>
+        Change the photo a rug shows on the homepage without affecting its product page or catalogue image.
+      </p>
+      {sections.map((section) => (
+        <div key={section.title} className="home-products-group">
+          <h4 className="home-products-heading">{section.title}</h4>
+          <ul className="home-products-list">
+            {section.list.map((p) => (
+              <li key={`${section.title}-${p.id}`} className="home-product-row">
+                <img
+                  src={p.homeImageUrl || p.imageUrl || 'https://placehold.co/96x72?text=Rug'}
+                  alt="" width={72} height={54}
+                  style={{ objectFit: 'cover', borderRadius: 6, border: '1px solid var(--line)', background: '#e9e1d6' }}
+                />
+                <div className="home-product-info">
+                  <b>{p.name}</b>
+                  <span className="card-meta">/{p.slug}{heroSlugs.has(p.slug) ? ' · also in hero slideshow' : ''}</span>
+                  {p.homeImageUrl
+                    ? <span className="tag" style={{ alignSelf: 'flex-start' }}>Custom homepage photo</span>
+                    : <span className="muted" style={{ fontSize: '0.74rem' }}>Using catalogue photo</span>}
+                </div>
+                <ImageEditor
+                  idPrefix={`home-img-${section.title.replace(/\W+/g, '-')}-${p.slug}`}
+                  label="Change Photo"
+                  currentUrl={p.homeImageUrl ?? null}
+                  fallbackSrc={p.imageUrl ?? undefined}
+                  note="Uploaded images replace the homepage photo only. Remove to restore the catalogue image."
+                  onUpload={onUpload}
+                  onSave={async (url) => { await saveProductHomeImage(p.slug, url); }}
+                />
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** Admin Studio — product management + full website content management. */
 export default function AdminPage() {
   const [tab, setTab] = useState<'products' | 'homepage' | 'collections' | 'product-content' | 'shared'>('products');

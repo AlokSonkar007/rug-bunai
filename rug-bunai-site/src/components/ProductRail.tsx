@@ -8,7 +8,7 @@ import { ProductCard } from './ProductCard';
  * curated collections on mobile & tablet. Arrows appear on pointer devices;
  * touch users simply swipe. Items never squish — they keep a fixed card width.
  */
-export default function ProductRail({ products }: { products: readonly Product[] }) {
+export default function ProductRail({ products, imageMode = 'catalogue' }: { products: readonly Product[]; imageMode?: 'catalogue' | 'homepage' }) {
   const scroller = useRef<HTMLDivElement>(null);
   const [edges, setEdges] = useState({ start: true, end: false });
 
@@ -33,7 +33,7 @@ export default function ProductRail({ products }: { products: readonly Product[]
       <div className="rail" ref={scroller} onScroll={measure}>
         {products.map((p) => (
           <div className="rail-item" key={p.id}>
-            <ProductCard product={p} />
+            <ProductCard product={p} imageMode={imageMode} />
           </div>
         ))}
       </div>

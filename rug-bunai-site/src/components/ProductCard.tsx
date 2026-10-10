@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { formatINR, priceRange, type Product } from '../data/products';
 import { COLORS, colorHex, findTerm, MATERIALS, TECHNIQUES } from '../data/vocabularies';
-import { productImage } from '../lib/images';
+import { homeProductImage, productImage } from '../lib/images';
 
 /** Reveal-on-scroll wrapper (IntersectionObserver; honours reduced motion via CSS). */
 export function Reveal({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
@@ -32,7 +32,7 @@ export function Reveal({ children, delay = 0 }: { children: React.ReactNode; del
  * On touch devices (no hover) the alt-angle strip crossfades automatically —
  * a mini-slideshow per card, standard in modern storefronts.
  */
-export function ProductCard({ product, eager = false }: { product: Product; eager?: boolean }) {
+export function ProductCard({ product, eager = false, imageMode = 'catalogue' }: { product: Product; eager?: boolean; imageMode?: 'catalogue' | 'homepage' }) {
   const range = priceRange(product);
   const tech = findTerm(TECHNIQUES, product.techniqueSlug)?.label ?? 'Handmade';
   const mat = findTerm(MATERIALS, product.materialSlug)?.label ?? 'natural fibre';
@@ -48,6 +48,9 @@ export function ProductCard({ product, eager = false }: { product: Product; eage
     return () => window.clearInterval(id);
   }, [touch, reduced, altAngles.length]);
   const displayAngle = touch && altAngles.length > 0 ? altAngles[autoAngle] : 0;
+  // Homepage mode prefers the Studio's homepage-only photo override, then
+  // falls back to the catalogue image / generated art exactly as before.
+  const pickImage = imageMode === 'homepage' ? homeProductImage : productImage;
 
   return (
     <article className="card">
@@ -55,7 +58,7 @@ export function ProductCard({ product, eager = false }: { product: Product; eage
         <Link to={`/rugs/${product.slug}`} aria-label={`${product.name} — view details`}>
           <img
             className="card-hero-img"
-            src={productImage(product, displayAngle, 640, 480)}
+            src={pickImage(product, displayAngle, 640, 480)}
             alt={`${product.name}, ${tech} ${mat.toLowerCase()} rug`}
             loading={eager ? 'eager' : 'lazy'}
             width={640}

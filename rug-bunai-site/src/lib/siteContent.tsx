@@ -225,7 +225,7 @@ const LS_OVERRIDES = 'rugbunai-product-overrides-v1';
  */
 export type TextOverride = Partial<Pick<Product, 'name' | 'tagline' | 'description' | 'craftStory' | 'colorSlugs' | 'colourOptions'>>
   & { specs?: { careInstructions?: string } };
-export type ProductOverrideMap = Record<string, { text?: TextOverride; imageUrl?: string | null; hidden?: boolean }>;
+export type ProductOverrideMap = Record<string, { text?: TextOverride; imageUrl?: string | null; homeImageUrl?: string | null; hidden?: boolean }>;
 
 function readLS<T>(key: string, fallback: T): T {
   try {
@@ -248,6 +248,8 @@ type SiteContentCtx = {
   /** Edit just the Care-instructions copy of a product. */
   saveProductCare: (slugKey: string, careInstructions: string) => Promise<void>;
   saveProductImage: (slugKey: string, url: string | null) => Promise<void>;
+  /** Homepage-only photo override — does not change the catalogue/PDP image. */
+  saveProductHomeImage: (slugKey: string, url: string | null) => Promise<void>;
   saveProductHidden: (slugKey: string, hidden: boolean) => Promise<void>;
   resetAll: () => Promise<void>;
   saving: boolean;
@@ -356,6 +358,13 @@ export function SiteContentProvider({ children }: { children: ReactNode }) {
     await persist(cur, { ...ov, [productSlug]: { ...ov[productSlug], imageUrl } });
   }, [loadPair, persist]);
 
+  /** Persist a homepage-specific photo for one product without touching its
+      catalogue image (`imageUrl`) or any other field of the record. */
+  const saveProductHomeImage = useCallback(async (productSlug: string, homeImageUrl: string | null) => {
+    const [cur, ov] = await loadPair();
+    await persist(cur, { ...ov, [productSlug]: { ...ov[productSlug], homeImageUrl } });
+  }, [loadPair, persist]);
+
   const saveProductHidden = useCallback(async (productSlug: string, hidden: boolean) => {
     const [cur, ov] = await loadPair();
     await persist(cur, { ...ov, [productSlug]: { ...ov[productSlug], hidden } });
@@ -366,8 +375,8 @@ export function SiteContentProvider({ children }: { children: ReactNode }) {
   }, [persist]);
 
   const value = useMemo<SiteContentCtx>(() => ({
-    content, productOverrides, saveContent, saveCollectionContent, saveProductText, saveProductCare, saveProductImage, saveProductHidden, resetAll, saving,
-  }), [content, productOverrides, saveContent, saveCollectionContent, saveProductText, saveProductCare, saveProductImage, saveProductHidden, resetAll, saving]);
+    content, productOverrides, saveContent, saveCollectionContent, saveProductText, saveProductCare, saveProductImage, saveProductHomeImage, saveProductHidden, resetAll, saving,
+  }), [content, productOverrides, saveContent, saveCollectionContent, saveProductText, saveProductCare, saveProductImage, saveProductHomeImage, saveProductHidden, resetAll, saving]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
