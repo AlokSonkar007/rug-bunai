@@ -122,7 +122,7 @@ function managedProduct(row: ManagedRow): CatalogProduct {
     variants: saved.variants?.length ? saved.variants : [{
       id: 'variant-' + id,
       sku: 'RB-' + id.slice(0, 8).toUpperCase(),
-      sizeLabel: "6' × 9'",
+      sizeLabel: '6 × 9 ft',
       width: { cm: 183, in: 72 },
       length: { cm: 274, in: 108 },
       colorSlug: 'ivory',
@@ -175,7 +175,7 @@ function newProductPayload(input: NewProductInput): Product {
       warpMaterial: 'Cotton',
       weaveMonthsApprox: 4,
     },
-    variants: variants.length ? variants : [makeVariant('variant-' + id, prefix, "6' × 9'", 6, 9, 'ivory', 0, 1)],
+    variants: variants.length ? variants : [makeVariant('variant-' + id, prefix, '6 × 9 ft', 6, 9, 'ivory', 0, 1)],
     rating: 5,
     reviewsCount: 0,
     addedDaysAgo: 0,

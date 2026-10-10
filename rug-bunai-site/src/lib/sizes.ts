@@ -18,7 +18,7 @@ const CM_PER_FT = 30.48;
 
 const build = (key: string, w: number, l: number): SizeOption => ({
   key,
-  label: `${w}' × ${l}'`,
+  label: `${w} × ${l} ft`,
   ft: [w, l],
   cm: [Math.round(w * CM_PER_FT), Math.round(l * CM_PER_FT)],
   inches: [Math.round(w * 12), Math.round(l * 12)],
@@ -33,13 +33,19 @@ export const SIZE_OPTIONS: readonly SizeOption[] = [
   build('9x12', 9, 12),    // 9'×12' — extra-large statement piece
   {
     key: 'custom',
-    label: 'Custom size',
+    label: 'Custom Size — Enter Width × Length (ft)',
     ft: [0, 0],
     cm: [0, 0],
     inches: [0, 0],
     custom: true,
   },
 ];
+
+/** Format any numeric feet pair with the site-wide convention: `5 × 8 ft`. */
+export function formatFtLabel(widthFt: number, lengthFt: number): string {
+  const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
+  return `${fmt(widthFt)} × ${fmt(lengthFt)} ft`;
+}
 
 export const CUSTOM_SIZE = SIZE_OPTIONS[SIZE_OPTIONS.length - 1];
 
@@ -52,8 +58,7 @@ export function sizeLabelFor(widthFt: number, lengthFt: number): string {
     (s) => !s.custom && ((s.ft[0] === widthFt && s.ft[1] === lengthFt) || (s.ft[0] === lengthFt && s.ft[1] === widthFt)),
   );
   if (match) return match.label;
-  const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
-  return `${fmt(widthFt)}' × ${fmt(lengthFt)}'`;
+  return formatFtLabel(widthFt, lengthFt);
 }
 
 /** Legacy products stored cm dimensions — recover the nearest canonical size. */
@@ -146,10 +151,10 @@ export interface RoomSizeGuidance {
 }
 
 export const ROOM_SIZE_GUIDANCE: readonly RoomSizeGuidance[] = [
-  { roomSlug: 'living-room', note: 'Leave 15–30 cm of floor showing beyond every sofa leg. A 6\' × 9\' anchors most sofas; go 8\' × 10\' or 9\' × 12\' for open-plan rooms.', recommendedKeys: ['5x8', '6x9', '8x10', '9x12'] },
-  { roomSlug: 'bedroom', note: 'A bedside 4\' × 6\' lands underfoot when you rise; for a king bed let the rug extend 60 cm past both sides — 6\' × 9\' or 8\' × 10\'.', recommendedKeys: ['4x6', '5x8', '6x9', '8x10'] },
-  { roomSlug: 'dining-room', note: 'Add 2 ft on every side of the table so chairs stay on the rug when pulled out — usually 8\' × 10\' for six seats, 9\' × 12\' for eight.', recommendedKeys: ['6x9', '8x10', '9x12'] },
-  { roomSlug: 'kids-room', note: 'Pick a soft pile sized to the play zone — 4\' × 6\' beside the bed or 5\' × 8\' / 6\' × 9\' for a floor-play area that wipes clean.', recommendedKeys: ['4x6', '5x8', '6x9'] },
-  { roomSlug: 'hallway', note: 'Runners keep passages warm; 4\' × 6\' works at an entry, narrow long formats elsewhere.', recommendedKeys: ['4x6', '5x8'] },
-  { roomSlug: 'office', note: 'A 5\' × 8\' under a desk chair keeps casters on pile; 4\' × 6\' suits a reading corner.', recommendedKeys: ['4x6', '5x8', '6x9'] },
+  { roomSlug: 'living-room', note: 'Leave 15–30 cm of floor showing beyond every sofa leg. A 6 × 9 ft anchors most sofas; go 8 × 10 ft or 9 × 12 ft for open-plan rooms.', recommendedKeys: ['5x8', '6x9', '8x10', '9x12'] },
+  { roomSlug: 'bedroom', note: 'A bedside 4 × 6 ft lands underfoot when you rise; for a king bed let the rug extend 60 cm past both sides — 6 × 9 ft or 8 × 10 ft.', recommendedKeys: ['4x6', '5x8', '6x9', '8x10'] },
+  { roomSlug: 'dining-room', note: 'Add 2 ft on every side of the table so chairs stay on the rug when pulled out — usually 8 × 10 ft for six seats, 9 × 12 ft for eight.', recommendedKeys: ['6x9', '8x10', '9x12'] },
+  { roomSlug: 'kids-room', note: 'Pick a soft pile sized to the play zone — 4 × 6 ft beside the bed or 5 × 8 ft / 6 × 9 ft for a floor-play area that wipes clean.', recommendedKeys: ['4x6', '5x8', '6x9'] },
+  { roomSlug: 'hallway', note: 'Runners keep passages warm; 4 × 6 ft works at an entry, narrow long formats elsewhere.', recommendedKeys: ['4x6', '5x8'] },
+  { roomSlug: 'office', note: 'A 5 × 8 ft under a desk chair keeps casters on pile; 4 × 6 ft suits a reading corner.', recommendedKeys: ['4x6', '5x8', '6x9'] },
 ];
