@@ -48,6 +48,7 @@ const router = createBrowserRouter([
       // redirected so previously published links keep working.
       { path: 'policies', element: <Navigate to="/policies/privacy-policy" replace /> },
       { path: 'policies/privacy', element: <Navigate to="/policies/privacy-policy" replace /> },
+      { path: 'policies/shipping', element: <Navigate to="/policies/shipping-policy" replace /> },
       { path: 'policies/:slug', element: <PolicyPage /> },
       { path: '*', element: <NotFound /> },
     ],

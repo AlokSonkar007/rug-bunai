@@ -1085,4 +1085,42 @@ main { flex: 1; }
 .studio-tabs { display: flex; gap: 18px; flex-wrap: wrap; border-bottom: 1px solid var(--line); margin-top: 26px; }
 
 /* Privacy/policy pages: keep the fixed WhatsApp FAB clear of the page-end actions on small screens. */
-.policy-page { padding-bottom: 96px; }
+.policy-page { padding-bottom: clamp(120px, 16vw, 160px); }
+
+/* Responsive policy typography & layout (Privacy Policy + Shipping Policy).
+   Body copy stays left-aligned; only the column itself is centred with a
+   readable measure so long lines never hurt legibility on wide screens. */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+.policy-page .policy-head { max-width: 68ch; margin-inline: auto; text-align: left; }
+.policy-page .policy-head h1.display { font-size: clamp(1.7rem, 5.4vw, 2.6rem); line-height: 1.15; margin: 10px 0 6px; overflow-wrap: anywhere; }
+.policy-updated { font-size: 0.75rem; letter-spacing: 0.12em; text-transform: uppercase; }
+.policy-intro { margin-top: 20px; }
+.policy-section { margin-top: clamp(30px, 5vw, 42px); max-width: 68ch; margin-inline: auto; }
+.policy-section h2.subhead { font-size: clamp(1.08rem, 2.6vw, 1.3rem); line-height: 1.3; margin-bottom: 12px; }
+.policy-section p { margin-bottom: 12px; text-align: left; line-height: 1.7; overflow-wrap: anywhere; hyphens: auto; }
+.policy-actions { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 4px; }
+.policy-crosslinks { margin-top: 26px; font-size: 0.8rem; max-width: 68ch; margin-inline: auto; }
+.policy-page hr.rule { margin: 48px auto 26px; max-width: 68ch; }
+
+/* Shipping timelines: semantic table on wider screens, stacked definition
+   rows under ~560px so nothing forces horizontal page scrolling. */
+.policy-timeline { margin: 6px 0 16px; }
+.policy-timeline table { width: 100%; border-collapse: collapse; }
+.policy-timeline th, .policy-timeline td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.policy-timeline thead th { font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted, inherit); border-bottom-width: 2px; }
+.policy-timeline tbody th { font-weight: 600; }
+.policy-timeline td { color: var(--ink-soft, inherit); }
+.policy-timeline-note { font-size: 0.82rem; margin-top: 10px; }
+@media (max-width: 560px) {
+  .policy-timeline thead { display: none; }
+  .policy-timeline table, .policy-timeline tbody, .policy-timeline tr, .policy-timeline th, .policy-timeline td { display: block; width: auto; }
+  .policy-timeline tr { padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .policy-timeline th[scope='row'] { padding: 0 0 2px; border: 0; }
+  .policy-timeline td { padding: 0 0 2px; border: 0; }
+}
+@media (min-width: 561px) and (max-width: 900px) {
+  .policy-timeline { overflow-x: auto; }
+}
