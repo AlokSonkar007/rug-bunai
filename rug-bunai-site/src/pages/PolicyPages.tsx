@@ -13,61 +13,113 @@ type PolicyDoc = { eyebrow: string; title: string; updated: string; intro: strin
 const UPDATED = 'Last updated: 10 October 2026';
 
 const POLICIES: Record<string, PolicyDoc> = {
+  /**
+   * Privacy Policy content mirrors the business-approved draft exactly.
+   * It deliberately avoids claiming payment gateways, analytics, cookie
+   * consent or notification workflows that are not actually implemented
+   * in this application.
+   */
   privacy: {
     eyebrow: 'Legal',
     title: 'Privacy Policy',
     updated: UPDATED,
     intro:
-      'Rug Bunai ("we", "our", "us") respects your privacy. This policy explains what we collect when you browse or buy from rugbunai.com, why we collect it, and the choices you have.',
+      'Rug Bunai respects your privacy and aims to handle your personal information responsibly when you visit our website, contact us, create an account, or purchase our rugs, carpets and related products.',
     sections: [
       {
-        heading: '1. Information we collect',
+        heading: '1. Introduction',
         body: [
-          'Account information: your name, email address and password (stored in hashed form via our authentication provider, Supabase) when you create an account.',
-          'Order information: shipping address, contact number, items purchased and payment confirmation. We never store full card numbers — payments are processed by our payment gateway.',
-          'Usage information: pages viewed, searches performed and device details, collected through standard cookies and local storage so your cart and wishlist survive page reloads.',
+          'This Privacy Policy explains the types of personal information that may be collected through our website, how that information may be used and shared, how it may be retained, and how you can contact us about privacy-related concerns.',
+          'Rug Bunai operates from Bhadohi, Uttar Pradesh, India. The precise legal identity and registered business details of the website operator must be confirmed by the business owner and displayed wherever required.',
         ],
       },
       {
-        heading: '2. How we use your information',
+        heading: '2. Information We May Collect',
         body: [
-          'To fulfil orders, send order confirmations and answer enquiries made through WhatsApp, phone or the contact page.',
-          'To personalise your experience — cart sync, saved wishlist and recently viewed pieces.',
-          'To improve our catalogue and website performance, and to send the monthly Loom Letter only if you subscribe. Every email includes an unsubscribe link.',
-          'We do not sell your personal data to third parties.',
+          'Depending on the features you use and the information you provide, the following categories of information may be processed:',
+          'Account and contact information: Your name, email address, telephone number and account-related information when you register, sign in or contact us.',
+          'Order and delivery information: Information needed to process and fulfil an order, which may include your billing and delivery address, purchased products, selected product options, order status and delivery details.',
+          'Customer communications: Information you include in enquiries, support requests, product customisation requests or other communications with Rug Bunai.',
+          'Transaction-related information: Order totals, payment status, transaction references and related records necessary to manage purchases. Payment-card or banking credentials should not be collected or stored by Rug Bunai unless the actual payment system requires and securely supports that processing.',
+          'Technical information: Limited information about your browser, device, website interactions, security events or similar technical details, where the website\u2019s actual infrastructure collects it.',
+          'The information processed depends on the functionality you use. We aim to collect information relevant to the purpose for which it is needed.',
         ],
       },
       {
-        heading: '3. Storage and security',
+        heading: '3. How We Use Information',
         body: [
-          'Customer data is stored on Supabase (PostgreSQL) with Row Level Security enabled, so each signed-in customer can read only their own cart, wishlist and profile.',
-          'Access to administrative functions requires an elevated role granted to studio staff only.',
-          'We use industry-standard TLS encryption in transit and reasonable safeguards at rest, but no method of transmission is perfectly secure.',
+          'Where applicable to the services you use, personal information may be used to: create and manage customer accounts; process orders and provide customer support; arrange production, delivery and order tracking; respond to questions about products, rug sizes, colours and customisation requests; communicate order confirmations, dispatch updates and delivery information through available communication channels; handle returns, refunds, cancellations and complaints; maintain website functionality, account security and fraud prevention; maintain business records and comply with applicable legal obligations; and improve the website and customer experience where appropriate and supported by the actual data practices.',
+          'We should not use personal information for unrelated purposes without an appropriate basis and any notice, permission or consent required by applicable law.',
+          'Marketing communications, where offered, should be handled separately from essential order-related messages where appropriate.',
         ],
       },
       {
-        heading: '4. Cookies and local storage',
+        heading: '4. How Information May Be Shared',
         body: [
-          'We use browser local storage for cart contents, wishlist state and session tokens. These are essential for the shop to function.',
-          'Any optional analytics cookies will only be set after you consent, where required by law.',
+          'Personal information may be shared with service providers when necessary to operate the website and fulfil the purposes described in this policy. Depending on the services actually used, these providers may include website hosting and infrastructure providers; authentication, database and file-storage providers; payment-processing providers; delivery and logistics partners; and customer-support and communication providers.',
+          'Information may also be disclosed when required by applicable law or when reasonably necessary to protect the security of the website, investigate suspected fraud, or establish or defend legal claims.',
+          'The actual providers and information shared must be limited to those relevant to Rug Bunai\u2019s operating arrangements. We do not claim that any particular provider receives information unless that integration is actually in use.',
         ],
       },
       {
-        heading: '5. Your rights',
+        heading: '5. Data Retention',
         body: [
-          'You may access, correct or request deletion of your personal data by writing to us or messaging the atelier on WhatsApp. Under India\u2019s Digital Personal Data Protection Act, 2023, you also have the right to withdraw consent and to nominate a person to exercise your data rights.',
-          'You can delete your account and associated cart/wishlist data at any time by contacting the studio; lawful order records may be retained for accounting and tax compliance.',
+          'We retain personal information for as long as it is reasonably necessary for the relevant purpose, including account administration, order fulfilment, customer support, business records, security and applicable legal obligations.',
+          'Retention periods may differ depending on the type of information and the reason it is held.',
+          'Where information is no longer required and there is no applicable legal or operational reason to retain it, appropriate deletion or anonymisation should be undertaken, subject to the capabilities of the systems used. A specific deletion timeframe should not be assumed unless it has been established by the business and implemented in its data-retention procedures.',
         ],
       },
       {
-        heading: '6. Children',
-        body: ['Our site is intended for adults. We do not knowingly collect data from children under 18 without parental consent.'],
+        heading: '6. Data Security',
+        body: [
+          'Rug Bunai aims to protect personal information through appropriate technical and organisational safeguards.',
+          'The website operator should maintain suitable access controls, protect administrative credentials, restrict access to customer information, and use secure configurations for the systems handling personal data.',
+          'No website or electronic transmission can be guaranteed to be completely secure. Any statements about specific security certifications, encryption configurations, audits or guarantees must reflect verified practices rather than assumptions.',
+        ],
       },
       {
-        heading: '7. Changes and contact',
+        heading: '7. Cookies and Similar Technologies',
         body: [
-          'If we change this policy we will update the date above and, for material changes, notify registered customers by email.',
-          `Questions about privacy? Call ${CONTACT_PHONE_DISPLAY} or write to the atelier — Bhadohi, Uttar Pradesh, India — 221401.`,
+          'The website may use essential browser storage, cookies or similar technologies to support functionality such as account sessions, cart behaviour, security and user preferences.',
+          'Additional analytics or tracking technologies should be described here only if they are actually used. The specific technologies, their purposes and any available controls must reflect the website\u2019s real implementation. Where applicable, users should be provided with the notices, choices or consent mechanisms required by law.',
+          'This section does not claim that Rug Bunai uses advertising cookies, analytics trackers or a cookie-consent platform unless those features are verified.',
+        ],
+      },
+      {
+        heading: '8. Customer Privacy Requests',
+        body: [
+          'If you have a question about your personal information, believe information associated with your account is inaccurate, or wish to request access, correction, deletion or another privacy-related action, contact Rug Bunai using the customer-support channel below.',
+          'We will review requests and respond in accordance with applicable law, the nature of the request, and any relevant legal or operational retention requirements. Requests may require reasonable verification of identity to prevent unauthorised access or changes to personal information.',
+          'The rights available, the applicable procedures and any statutory response periods depend on the provisions of law in force at the relevant time. The business should ensure that its actual procedures are updated as applicable legal requirements commence.',
+        ],
+      },
+      {
+        heading: '9. Children\u2019s Privacy',
+        body: [
+          'The website is intended to facilitate the purchase of rugs, carpets and related products. It is not intended to encourage children to provide personal information unnecessarily.',
+          'If the business becomes aware that personal information has been collected in circumstances requiring additional safeguards, it should assess the situation and take appropriate action in accordance with applicable law. Any claims concerning parental consent, age verification or specific children\u2019s-data safeguards must reflect procedures that are actually implemented.',
+        ],
+      },
+      {
+        heading: '10. Third-Party Websites and Services',
+        body: [
+          'The website may link to third-party websites or services, for example when a customer chooses to communicate through an external messaging service or uses a payment or delivery service.',
+          'Those third parties may process information under their own privacy policies and terms. Rug Bunai\u2019s policy does not replace the privacy policies of third-party services. Customers should review the relevant third party\u2019s terms when using its services. Only describe third-party integrations that are actually present on the website.',
+        ],
+      },
+      {
+        heading: '11. Changes to This Policy',
+        body: [
+          'This Privacy Policy may be updated when the website\u2019s practices, services or applicable legal requirements change. The revised version will be published on this page with an updated date. Where required by applicable law or appropriate to the nature of a material change, additional notice or action may be necessary.',
+          'Customers should review this page periodically for relevant updates.',
+        ],
+      },
+      {
+        heading: '12. Contact Us',
+        body: [
+          'For privacy-related questions, requests or concerns, contact Rug Bunai:',
+          'Business name: Rug Bunai. Business location: Bhadohi, Uttar Pradesh, India. Customer support: +91 9555036025. Support hours: 10:00 AM\u20136:00 PM, Monday\u2013Saturday, excluding national holidays.',
+          'The business owner must confirm the operator\u2019s complete legal name, full postal address and an appropriate support or privacy email address. Any designated privacy or grievance contact required by applicable law must also be confirmed and displayed where necessary.',
         ],
       },
     ],
