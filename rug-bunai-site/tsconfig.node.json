@@ -19,5 +19,9 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["vite.config.ts"]
+  // Contract test for the Supabase migration — kept out of the browser build
+  // (tsconfig.app.json excludes it) and out of this Node project too; it is
+  // type-checked implicitly when vitest runs it.
+  "include": ["vite.config.ts"],
+  "exclude": ["src/lib/siteContent.contract.test.ts"]
 }
