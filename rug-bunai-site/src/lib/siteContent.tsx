@@ -133,6 +133,7 @@ export const DEFAULT_CONTENT: SiteContent = {
     { title: 'Living Room', blurb: 'designs', to: '/rugs?room=living-room', imageUrl: null, countSuffix: '' },
     { title: 'Bedroom', blurb: 'designs', to: '/rugs?room=bedroom', imageUrl: null, countSuffix: '' },
     { title: 'Dining Room', blurb: 'designs', to: '/rugs?room=dining-room', imageUrl: null, countSuffix: '' },
+    { title: 'Kids Room', blurb: 'designs', to: '/rugs?room=kids-room', imageUrl: null, countSuffix: '' },
     { title: 'Hallway', blurb: 'designs', to: '/rugs?room=hallway', imageUrl: null, countSuffix: '' },
     { title: 'Office', blurb: 'designs', to: '/rugs?room=office', imageUrl: null, countSuffix: '' },
   ],

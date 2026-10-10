@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { formatINR } from '../data/products';
 import { useCart } from '../lib/cart';
+import { STAIN_COAT_RATE_INR_PER_SQFT } from '../lib/sizes';
 import { productImage } from '../lib/images';
 
 export function CartPage() {
@@ -45,7 +46,17 @@ export function CartPage() {
                 {l.custom?.note && (
                   <p className="muted cart-custom-note">{l.custom.note}</p>
                 )}
-                <p className="muted" style={{ fontSize: '0.8rem', marginTop: 6 }}>{formatINR(l.variant.priceInr)} each</p>
+                <p className="muted" style={{ fontSize: '0.8rem', marginTop: 6 }}>
+                  {formatINR(l.unitPriceInr)} each{l.coating ? ` + ${formatINR(l.coatPerUnitInr)} coating` : ''}
+                </p>
+                <label className="coating-toggle cart-coating-toggle">
+                  <input
+                    type="checkbox"
+                    checked={l.coating}
+                    onChange={(e) => cart.setCoating(l.variant.id, e.target.checked)}
+                  />
+                  <span>Stain-resistant coating ({formatINR(l.coatPerUnitInr)}) — ₹{STAIN_COAT_RATE_INR_PER_SQFT}/sq ft × {l.sqft} sq ft</span>
+                </label>
                 <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginTop: 12 }}>
                   <span className="qty-stepper" aria-label={`Quantity of ${l.product.name}`}>
                     <button aria-label="Decrease quantity" onClick={() => cart.setQty(l.variant.id, l.qty - 1)}>−</button>
@@ -55,13 +66,16 @@ export function CartPage() {
                   <button className="clear-all" onClick={() => cart.remove(l.variant.id)}>Remove</button>
                 </div>
               </div>
-              <p className="card-price" style={{ alignSelf: 'start', paddingTop: 6 }}>{formatINR(l.variant.priceInr * l.qty)}</p>
+              <p className="card-price" style={{ alignSelf: 'start', paddingTop: 6 }}>{formatINR(l.lineTotalInr)}</p>
             </div>
           ))}
         </div>
         <aside className="summary-card">
           <h2 className="subhead" style={{ marginBottom: 18 }}>Summary</h2>
-          <div className="summary-row"><span>Subtotal</span><span>{formatINR(cart.subtotalInr)}</span></div>
+          <div className="summary-row"><span>Rugs subtotal</span><span>{formatINR(cart.rugSubtotalInr)}</span></div>
+          {cart.coatingTotalInr > 0 && (
+            <div className="summary-row"><span>Stain-resistant coating</span><span>+{formatINR(cart.coatingTotalInr)}</span></div>
+          )}
           <div className="summary-row"><span>Shipping &amp; insurance</span><span>Included — India</span></div>
           <div className="summary-row"><span>GST</span><span>At checkout</span></div>
           <div className="summary-row summary-total"><span>Total</span><span>{formatINR(cart.subtotalInr)}</span></div>
@@ -187,12 +201,15 @@ export function CheckoutPage() {
               <img src={productImage(l.product, 0, 96, 72)} alt="" width={56} height={42} style={{ objectFit: 'cover' }} loading="lazy" />
               <div style={{ flex: 1 }}>
                 <p style={{ fontFamily: 'var(--serif)' }}>{l.product.name}</p>
-                <p className="card-meta">{l.variant.sizeLabel} × {l.qty}</p>
+                <p className="card-meta">{l.variant.sizeLabel} × {l.qty}{l.coating ? ' · coated' : ''}</p>
               </div>
-              <span style={{ fontSize: '0.82rem' }}>{formatINR(l.variant.priceInr * l.qty)}</span>
+              <span style={{ fontSize: '0.82rem' }}>{formatINR(l.lineTotalInr)}</span>
             </div>
           ))}
           <div className="summary-row" style={{ marginTop: 10 }}><span>Shipping</span><span>Included</span></div>
+          {cart.coatingTotalInr > 0 && (
+            <div className="summary-row"><span>Stain-resistant coating</span><span>+{formatINR(cart.coatingTotalInr)}</span></div>
+          )}
           <div className="summary-row summary-total"><span>Total</span><span>{formatINR(cart.subtotalInr)}</span></div>
         </aside>
       </div>
