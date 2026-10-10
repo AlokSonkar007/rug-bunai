@@ -5,7 +5,7 @@ import {
   appliedChips, EMPTY_FACETS, facetsFromSearch, facetsToSearch, removeChip,
   runSearch, SORT_OPTIONS, type FacetGroup, type FacetState,
 } from '../lib/search';
-import { CATEGORY_TITLES, productsInCategory } from '../lib/search';
+import { categoryTitle, productsInCategory } from '../lib/search';
 import { ProductCard, Reveal } from './ProductCard';
 import { useCatalog } from '../lib/catalog';
 
